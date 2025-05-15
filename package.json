@@ -1,0 +1,34 @@
+{
+  "name": "intelligent-rag-server",
+  "version": "1.0.0",
+  "description": "Modular, project-aware Retrieval-Augmented Generation (RAG) system",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "ingest": "node ingest/summarizeAndExtract.js",
+    "embed": "node ingest/embedAndStore.js",
+    "test": "jest"
+  },
+  "keywords": [
+    "rag",
+    "llm",
+    "mongodb",
+    "vector-search",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "mongodb": "^6.3.0",
+    "openai": "^4.20.1",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.1"
+  }
+}
