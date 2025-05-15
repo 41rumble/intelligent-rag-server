@@ -1,5 +1,5 @@
 const { OpenAI } = require('openai');
-const { Ollama } = require('@ollama/ollama');
+const Ollama = require('ollama');
 const axios = require('axios');
 const logger = require('./logger');
 require('dotenv').config();
@@ -30,11 +30,11 @@ if (LLM_PROVIDER === 'openai') {
   
   logger.info('OpenAI client initialized');
 } else if (LLM_PROVIDER === 'ollama') {
-  ollamaClient = new Ollama({
-    host: OLLAMA_BASE_URL,
-  });
+  // Configure Ollama client with base URL
+  Ollama.config({ host: OLLAMA_BASE_URL });
+  ollamaClient = Ollama;
   
-  logger.info('Ollama client initialized');
+  logger.info('Ollama client initialized with host: ' + OLLAMA_BASE_URL);
 } else {
   logger.error(`Unsupported LLM provider: ${LLM_PROVIDER}`);
   process.exit(1);
@@ -55,13 +55,13 @@ async function generateEmbedding(text) {
       
       return response.data[0].embedding;
     } else if (LLM_PROVIDER === 'ollama') {
-      // Use Ollama API directly for embeddings
-      const response = await axios.post(`${OLLAMA_BASE_URL}/api/embeddings`, {
+      // Use Ollama client for embeddings
+      const response = await ollamaClient.embeddings({
         model: OLLAMA_EMBEDDING_MODEL,
         prompt: text
       });
       
-      return response.data.embedding;
+      return response.embedding;
     }
   } catch (error) {
     logger.error('Error generating embedding:', error);
@@ -119,9 +119,10 @@ async function generateCompletion(prompt, options = {}) {
       const response = await ollamaClient.chat({
         model: OLLAMA_LLM_MODEL,
         messages,
-        temperature,
-        num_predict: maxTokens,
-        stream: false
+        options: {
+          temperature,
+          num_predict: maxTokens
+        }
       });
       
       return response.message.content;
