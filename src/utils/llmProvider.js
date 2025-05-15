@@ -1,5 +1,5 @@
 const { OpenAI } = require('openai');
-const Ollama = require('ollama');
+const { Ollama } = require('ollama');
 const axios = require('axios');
 const logger = require('./logger');
 require('dotenv').config();
@@ -30,9 +30,8 @@ if (LLM_PROVIDER === 'openai') {
   
   logger.info('OpenAI client initialized');
 } else if (LLM_PROVIDER === 'ollama') {
-  // Configure Ollama client with base URL
-  Ollama.config({ host: OLLAMA_BASE_URL });
-  ollamaClient = Ollama;
+  // Create Ollama client with custom host
+  ollamaClient = new Ollama({ host: OLLAMA_BASE_URL });
   
   logger.info('Ollama client initialized with host: ' + OLLAMA_BASE_URL);
 } else {
@@ -56,9 +55,9 @@ async function generateEmbedding(text) {
       return response.data[0].embedding;
     } else if (LLM_PROVIDER === 'ollama') {
       // Use Ollama client for embeddings
-      const response = await ollamaClient.embeddings({
+      const response = await ollamaClient.embed({
         model: OLLAMA_EMBEDDING_MODEL,
-        prompt: text
+        input: text
       });
       
       return response.embedding;
