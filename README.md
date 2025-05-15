@@ -166,18 +166,41 @@ The system uses the following environment variables:
 | --- | --- | --- |
 | `MONGODB_URI` | MongoDB connection string | mongodb://localhost:27017 |
 | `MONGODB_DB_NAME` | MongoDB database name | intelligent_rag |
-| `OPENAI_API_KEY` | OpenAI API key | (required) |
-| `EMBEDDING_MODEL` | OpenAI embedding model | text-embedding-ada-002 |
-| `LLM_MODEL` | OpenAI LLM model | gpt-4-1106-preview |
+| `LLM_PROVIDER` | LLM provider to use | openai |
+| `OPENAI_API_KEY` | OpenAI API key | (required if using OpenAI) |
+| `EMBEDDING_MODEL` | Embedding model | text-embedding-ada-002 |
+| `LLM_MODEL` | LLM model | gpt-4-1106-preview |
 | `PORT` | Server port | 3000 |
 | `NODE_ENV` | Environment | development |
 | `SEARXNG_INSTANCE` | SearXNG instance URL | (optional) |
+| `OLLAMA_BASE_URL` | Ollama API base URL | http://localhost:11434 |
+| `OLLAMA_EMBEDDING_MODEL` | Ollama embedding model | nomic-embed-text |
+| `OLLAMA_LLM_MODEL` | Ollama LLM model | llama3 |
 
 ### Model Selection
+
+#### Using OpenAI (Default)
 
 - **Embedding Model**: The system uses OpenAI's embedding models to convert text into vector representations. The default is `text-embedding-ada-002` which provides 1536-dimensional embeddings.
 
 - **LLM Model**: For text generation, the system uses OpenAI's GPT models. The default is `gpt-4-1106-preview` which provides the best quality responses, but you can use other models like `gpt-3.5-turbo` for faster, more cost-effective processing.
+
+#### Using Ollama (Local)
+
+To use Ollama instead of OpenAI, set the following environment variables:
+
+```
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+OLLAMA_LLM_MODEL=llama3
+```
+
+Make sure you have the required models pulled in Ollama:
+```bash
+ollama pull nomic-embed-text
+ollama pull llama3
+```
 
 ### Web Search Configuration
 

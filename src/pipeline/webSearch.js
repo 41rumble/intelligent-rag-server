@@ -1,12 +1,7 @@
 const axios = require('axios');
-const { OpenAI } = require('openai');
 const logger = require('../utils/logger');
+const { generateStructuredResponse } = require('../utils/llmProvider');
 require('dotenv').config();
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 // SearXNG instance URL
 const searxngInstance = process.env.SEARXNG_INSTANCE;
@@ -94,15 +89,10 @@ async function summarizeWebResults(searchResults, originalQuery) {
     - source_urls: An array of the most relevant source URLs
     `;
 
-    const response = await openai.chat.completions.create({
-      model: process.env.LLM_MODEL,
-      messages: [{ role: 'user', content: prompt }],
+    const result = await generateStructuredResponse(prompt, {
       temperature: 0.3,
-      max_tokens: 1000,
-      response_format: { type: 'json_object' }
+      maxTokens: 1000
     });
-
-    const result = JSON.parse(response.choices[0].message.content);
     
     logger.info('Web results summarized:', { 
       query: originalQuery,

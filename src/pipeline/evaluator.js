@@ -1,11 +1,6 @@
-const { OpenAI } = require('openai');
 const logger = require('../utils/logger');
+const { generateStructuredResponse } = require('../utils/llmProvider');
 require('dotenv').config();
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 /**
  * Evaluate the quality and relevance of a response
@@ -45,15 +40,10 @@ async function evaluateResponse(response, query) {
     - improvement_suggestions: array of strings
     `;
 
-    const evalResponse = await openai.chat.completions.create({
-      model: process.env.LLM_MODEL,
-      messages: [{ role: 'user', content: prompt }],
+    const evaluation = await generateStructuredResponse(prompt, {
       temperature: 0.3,
-      max_tokens: 1000,
-      response_format: { type: 'json_object' }
+      maxTokens: 1000
     });
-
-    const evaluation = JSON.parse(evalResponse.choices[0].message.content);
     
     logger.info('Response evaluated:', { 
       query,
@@ -120,15 +110,10 @@ async function generateImprovementSuggestions(evaluation, query) {
     - alternative_perspectives: Array of different viewpoints to consider
     `;
 
-    const response = await openai.chat.completions.create({
-      model: process.env.LLM_MODEL,
-      messages: [{ role: 'user', content: prompt }],
+    const suggestions = await generateStructuredResponse(prompt, {
       temperature: 0.5,
-      max_tokens: 800,
-      response_format: { type: 'json_object' }
+      maxTokens: 800
     });
-
-    const suggestions = JSON.parse(response.choices[0].message.content);
     
     logger.info('Improvement suggestions generated:', { 
       query,

@@ -1,11 +1,6 @@
-const { OpenAI } = require('openai');
 const logger = require('../utils/logger');
+const { generateStructuredResponse } = require('../utils/llmProvider');
 require('dotenv').config();
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 /**
  * Classify a query to extract entities and query type
@@ -37,15 +32,10 @@ async function classifyQuery(query, projectId) {
     - query_complexity: Numerical rating from 1-10 of how complex this query is
     `;
 
-    const response = await openai.chat.completions.create({
-      model: process.env.LLM_MODEL,
-      messages: [{ role: 'user', content: prompt }],
+    const classification = await generateStructuredResponse(prompt, {
       temperature: 0.3,
-      max_tokens: 500,
-      response_format: { type: 'json_object' }
+      maxTokens: 500
     });
-
-    const classification = JSON.parse(response.choices[0].message.content);
     
     logger.info('Query classified:', { 
       query, 

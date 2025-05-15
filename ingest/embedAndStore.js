@@ -1,14 +1,9 @@
 const fs = require('fs').promises;
 const path = require('path');
-const { OpenAI } = require('openai');
 const mongoClient = require('../src/utils/mongoClient');
 const logger = require('../src/utils/logger');
+const { generateEmbedding } = require('../src/utils/llmProvider');
 require('dotenv').config();
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 // Project ID from command line or default
 const projectId = process.argv[2] || 'the_great_fire';
@@ -18,24 +13,7 @@ const projectPath = path.join(__dirname, projectId);
 const synopsesPath = path.join(projectPath, 'synopses');
 const compiledBiosPath = path.join(projectPath, 'compiled_bios');
 
-/**
- * Generate embeddings for text
- * @param {string} text - Text to embed
- * @returns {Promise<Array>} Embedding vector
- */
-async function generateEmbedding(text) {
-  try {
-    const response = await openai.embeddings.create({
-      model: process.env.EMBEDDING_MODEL,
-      input: text,
-    });
-    
-    return response.data[0].embedding;
-  } catch (error) {
-    logger.error('Error generating embedding:', error);
-    throw error;
-  }
-}
+// Using the generateEmbedding function from llmProvider.js
 
 /**
  * Process and store chapter synopses

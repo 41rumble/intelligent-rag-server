@@ -1,11 +1,6 @@
-const { OpenAI } = require('openai');
 const logger = require('../utils/logger');
+const { generateCompletion } = require('../utils/llmProvider');
 require('dotenv').config();
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 /**
  * Build a final prompt for the LLM
@@ -106,14 +101,10 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
  */
 async function generateFinalAnswer(finalPrompt) {
   try {
-    const response = await openai.chat.completions.create({
-      model: process.env.LLM_MODEL,
-      messages: [{ role: 'user', content: finalPrompt }],
+    const answer = await generateCompletion(finalPrompt, {
       temperature: 0.7,
-      max_tokens: 2000
+      maxTokens: 2000
     });
-
-    const answer = response.choices[0].message.content;
     
     logger.info('Final answer generated:', { 
       answer_length: answer.length

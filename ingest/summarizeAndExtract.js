@@ -1,13 +1,8 @@
 const fs = require('fs').promises;
 const path = require('path');
-const { OpenAI } = require('openai');
 const logger = require('../src/utils/logger');
+const { generateStructuredResponse } = require('../src/utils/llmProvider');
 require('dotenv').config();
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 // Project ID from command line or default
 const projectId = process.argv[2] || 'the_great_fire';
@@ -45,7 +40,7 @@ async function extractCharacters(text, chapterId) {
     3. Note their role or significance in the story
     4. Include any historical context if applicable
     
-    Format your response as a JSON array where each object has:
+    Format your response as a JSON object with a "characters" field containing an array where each object has:
     - name: Full name
     - aliases: Array of alternative names/nicknames
     - bio_fragment: Biographical information from this text
@@ -56,15 +51,12 @@ async function extractCharacters(text, chapterId) {
     ${text.substring(0, 8000)}
     `;
 
-    const response = await openai.chat.completions.create({
-      model: process.env.LLM_MODEL,
-      messages: [{ role: 'user', content: prompt }],
+    const response = await generateStructuredResponse(prompt, {
       temperature: 0.3,
-      max_tokens: 2000,
-      response_format: { type: 'json_object' }
+      maxTokens: 2000
     });
 
-    const characters = JSON.parse(response.choices[0].message.content).characters || [];
+    const characters = response.characters || [];
     
     // Add source information
     return characters.map(char => ({
@@ -107,15 +99,10 @@ async function generateSynopsis(text, chapterId) {
     ${text.substring(0, 8000)}
     `;
 
-    const response = await openai.chat.completions.create({
-      model: process.env.LLM_MODEL,
-      messages: [{ role: 'user', content: prompt }],
+    const synopsis = await generateStructuredResponse(prompt, {
       temperature: 0.3,
-      max_tokens: 2000,
-      response_format: { type: 'json_object' }
+      maxTokens: 2000
     });
-
-    const synopsis = JSON.parse(response.choices[0].message.content);
     
     // Add metadata
     return {

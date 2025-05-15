@@ -1,11 +1,6 @@
-const { OpenAI } = require('openai');
 const logger = require('../utils/logger');
+const { generateStructuredResponse, generateCompletion } = require('../utils/llmProvider');
 require('dotenv').config();
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 /**
  * Generate semantically similar queries to improve retrieval
@@ -39,15 +34,10 @@ async function expandQuery(queryInfo, branchCount = 3) {
     - reasoning: Brief explanation of how these queries expand the search space
     `;
 
-    const response = await openai.chat.completions.create({
-      model: process.env.LLM_MODEL,
-      messages: [{ role: 'user', content: prompt }],
+    const result = await generateStructuredResponse(prompt, {
       temperature: 0.7,
-      max_tokens: 800,
-      response_format: { type: 'json_object' }
+      maxTokens: 800
     });
-
-    const result = JSON.parse(response.choices[0].message.content);
     
     logger.info('Query expanded:', { 
       original: original_query,
@@ -92,14 +82,10 @@ async function rephraseQuery(query) {
     Provide only the rephrased query without explanation.
     `;
 
-    const response = await openai.chat.completions.create({
-      model: process.env.LLM_MODEL,
-      messages: [{ role: 'user', content: prompt }],
+    const rephrased = await generateCompletion(prompt, {
       temperature: 0.3,
-      max_tokens: 200
+      maxTokens: 200
     });
-
-    const rephrased = response.choices[0].message.content.trim();
     
     logger.info('Query rephrased:', { 
       original: query,

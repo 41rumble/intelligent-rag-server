@@ -1,12 +1,7 @@
-const { OpenAI } = require('openai');
 const mongoClient = require('../utils/mongoClient');
 const logger = require('../utils/logger');
+const { generateEmbedding } = require('../utils/llmProvider');
 require('dotenv').config();
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 /**
  * Generate embedding for query text
@@ -15,12 +10,7 @@ const openai = new OpenAI({
  */
 async function generateQueryEmbedding(query) {
   try {
-    const response = await openai.embeddings.create({
-      model: process.env.EMBEDDING_MODEL,
-      input: query,
-    });
-    
-    return response.data[0].embedding;
+    return await generateEmbedding(query);
   } catch (error) {
     logger.error('Error generating query embedding:', error);
     throw error;

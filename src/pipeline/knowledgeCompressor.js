@@ -1,11 +1,6 @@
-const { OpenAI } = require('openai');
 const logger = require('../utils/logger');
+const { generateStructuredResponse } = require('../utils/llmProvider');
 require('dotenv').config();
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 /**
  * Compress multiple knowledge sources into a coherent summary
@@ -57,15 +52,10 @@ async function compressKnowledge(documents, query) {
     - source_ids: An array of the document IDs that were most relevant
     `;
 
-    const response = await openai.chat.completions.create({
-      model: process.env.LLM_MODEL,
-      messages: [{ role: 'user', content: prompt }],
+    const result = await generateStructuredResponse(prompt, {
       temperature: 0.3,
-      max_tokens: 1500,
-      response_format: { type: 'json_object' }
+      maxTokens: 1500
     });
-
-    const result = JSON.parse(response.choices[0].message.content);
     
     logger.info('Knowledge compressed:', { 
       query,
@@ -150,15 +140,10 @@ async function handleOversizedContext(documents, query) {
     - source_ids: An array of the document IDs that were most relevant
     `;
 
-    const response = await openai.chat.completions.create({
-      model: process.env.LLM_MODEL,
-      messages: [{ role: 'user', content: finalPrompt }],
+    const result = await generateStructuredResponse(finalPrompt, {
       temperature: 0.3,
-      max_tokens: 1500,
-      response_format: { type: 'json_object' }
+      maxTokens: 1500
     });
-
-    const result = JSON.parse(response.choices[0].message.content);
     
     // Add all source IDs if not provided in final result
     if (!result.source_ids || result.source_ids.length === 0) {
