@@ -21,7 +21,7 @@ The system is split into two main parts:
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/intelligent-rag-server.git
+   git clone https://github.com/41rumble/intelligent-rag-server.git
    cd intelligent-rag-server
    ```
 
@@ -30,12 +30,39 @@ The system is split into two main parts:
    npm install
    ```
 
-3. Create a `.env` file based on the provided `.env.example`:
+3. Create a `.env` file in the root directory with the following configuration:
+
    ```
-   cp .env.example .env
+   # MongoDB Connection
+   MONGODB_URI=mongodb://localhost:27017
+   MONGODB_DB_NAME=intelligent_rag
+
+   # OpenAI API
+   OPENAI_API_KEY=your_openai_api_key
+
+   # Embedding Model
+   EMBEDDING_MODEL=text-embedding-ada-002
+
+   # LLM Model
+   LLM_MODEL=gpt-4-1106-preview
+
+   # Server Configuration
+   PORT=3000
+   NODE_ENV=development
+
+   # Web Search API (optional)
+   SEARXNG_INSTANCE=https://searx.example.com
    ```
 
-4. Update the `.env` file with your MongoDB connection string and OpenAI API key.
+4. Update the `.env` file with your specific configuration:
+   - `MONGODB_URI`: Your MongoDB connection string (local or Atlas)
+   - `MONGODB_DB_NAME`: Name for your database (default: intelligent_rag)
+   - `OPENAI_API_KEY`: Your OpenAI API key for embeddings and LLM
+   - `EMBEDDING_MODEL`: OpenAI embedding model to use (default: text-embedding-ada-002)
+   - `LLM_MODEL`: OpenAI model for text generation (default: gpt-4-1106-preview)
+   - `PORT`: Port for the API server (default: 3000)
+   - `NODE_ENV`: Environment (development or production)
+   - `SEARXNG_INSTANCE`: Optional SearXNG instance URL for web search
 
 ### Running the Server
 
@@ -130,6 +157,31 @@ Response:
 - `GET /health` - Check system health
 - `GET /health/status` - Get detailed system status
 - `POST /api/query` - Submit a query
+
+## ⚙️ Environment Variables
+
+The system uses the following environment variables:
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `MONGODB_URI` | MongoDB connection string | mongodb://localhost:27017 |
+| `MONGODB_DB_NAME` | MongoDB database name | intelligent_rag |
+| `OPENAI_API_KEY` | OpenAI API key | (required) |
+| `EMBEDDING_MODEL` | OpenAI embedding model | text-embedding-ada-002 |
+| `LLM_MODEL` | OpenAI LLM model | gpt-4-1106-preview |
+| `PORT` | Server port | 3000 |
+| `NODE_ENV` | Environment | development |
+| `SEARXNG_INSTANCE` | SearXNG instance URL | (optional) |
+
+### Model Selection
+
+- **Embedding Model**: The system uses OpenAI's embedding models to convert text into vector representations. The default is `text-embedding-ada-002` which provides 1536-dimensional embeddings.
+
+- **LLM Model**: For text generation, the system uses OpenAI's GPT models. The default is `gpt-4-1106-preview` which provides the best quality responses, but you can use other models like `gpt-3.5-turbo` for faster, more cost-effective processing.
+
+### Web Search Configuration
+
+The optional web search feature requires a SearXNG instance. SearXNG is a privacy-respecting metasearch engine that can be self-hosted or you can use a public instance. Set the `SEARXNG_INSTANCE` variable to enable this feature.
 
 ## 📄 License
 
