@@ -34,12 +34,23 @@ app.use((err, req, res, next) => {
 // Connect to MongoDB and start server
 async function startServer() {
   try {
+    logger.info('Starting Intelligent RAG Server...');
+    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    logger.info(`LLM Provider: ${process.env.LLM_PROVIDER || 'openai'}`);
+    
+    if (process.env.LLM_PROVIDER === 'ollama') {
+      logger.info(`Ollama URL: ${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}`);
+      logger.info(`Ollama Models: ${process.env.OLLAMA_LLM_MODEL || 'llama3'} (LLM), ${process.env.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text'} (Embeddings)`);
+    }
+    
     // Connect to MongoDB
     await mongoClient.connect();
     
     // Start Express server
     app.listen(port, () => {
       logger.info(`Server running on port ${port}`);
+      logger.info(`Health check: http://localhost:${port}/health`);
+      logger.info(`API endpoint: http://localhost:${port}/api/query`);
     });
   } catch (error) {
     logger.error('Failed to start server:', error);

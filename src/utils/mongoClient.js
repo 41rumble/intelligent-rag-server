@@ -18,9 +18,16 @@ async function connect() {
   if (db) return db;
   
   try {
+    logger.info(`Connecting to MongoDB at ${uri} (database: ${dbName})...`);
     client = new MongoClient(uri);
     await client.connect();
-    logger.info('Connected to MongoDB');
+    
+    // Get server info to verify connection
+    const adminDb = client.db('admin');
+    const serverInfo = await adminDb.command({ serverStatus: 1 });
+    
+    logger.info(`Successfully connected to MongoDB ${serverInfo.version} at ${uri}`);
+    logger.info(`Using database: ${dbName}`);
     
     db = client.db(dbName);
     return db;
