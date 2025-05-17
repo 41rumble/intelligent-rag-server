@@ -140,7 +140,13 @@ async function initializeCollection(projectId) {
               }
             },
             time_period: {
-              bsonType: "string"
+              oneOf: [
+                { bsonType: "string" },
+                { 
+                  bsonType: "array",
+                  items: { bsonType: "string" }
+                }
+              ]
             },
             vector_id: {
               bsonType: "string"
