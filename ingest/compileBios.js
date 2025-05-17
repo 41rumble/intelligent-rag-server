@@ -53,25 +53,67 @@ async function groupBioFragments() {
  */
 async function compileBio(fragments) {
   try {
-    // Sort fragments by chapter number to maintain chronological order
-    const sortedFragments = fragments.sort((a, b) => {
-      const aNum = parseInt(a.source_file.match(/\d+/)[0]);
-      const bNum = parseInt(b.source_file.match(/\d+/)[0]);
-      return aNum - bNum;
+    // Validate fragments
+    if (!Array.isArray(fragments)) {
+      logger.error('Expected fragments to be an array, got:', typeof fragments);
+      return null;
+    }
+
+    if (fragments.length === 0) {
+      logger.error('No fragments provided');
+      return null;
+    }
+
+    // Filter out invalid fragments
+    const validFragments = fragments.filter(f => {
+      if (!f || typeof f !== 'object') {
+        logger.warn('Invalid fragment:', f);
+        return false;
+      }
+      if (!f.source_file || !f.name) {
+        logger.warn('Fragment missing required fields:', f);
+        return false;
+      }
+      return true;
     });
 
+    if (validFragments.length === 0) {
+      logger.error('No valid fragments found');
+      return null;
+    }
+    // Extract chapter number from source file
+    function getChapterNumber(sourceFile) {
+      const match = sourceFile.match(/\d+/);
+      if (!match) {
+        logger.warn(`Could not extract chapter number from source file: ${sourceFile}`);
+        return Infinity; // Put entries without chapter numbers at the end
+      }
+      return parseInt(match[0]);
+    }
+
+    // Sort fragments by chapter number to maintain chronological order
+    const sortedFragments = Array.from(fragments).sort((a, b) => {
+      if (!a || !b || !a.source_file || !b.source_file) {
+        logger.warn('Invalid fragment found:', { a, b });
+        return 0; // Keep invalid fragments in their original position
+      }
+      return getChapterNumber(a.source_file) - getChapterNumber(b.source_file);
+    });
+
+    // Use validFragments instead of original fragments
     const prompt = `
-    Analyze these character fragments chronologically to build a complete character arc. 
-    The fragments are ordered by chapter, showing how the character develops through the story.
+    Analyze these character fragments to build a complete character arc. 
+    The fragments are ordered chronologically where possible, showing how the character develops through the story.
     
     Focus on:
     1. Character development and growth
     2. Key turning points in their story
     3. How their role and relationships evolve
     4. Their overall journey through the narrative
+    5. Consistent characterization across all fragments
 
-    Bio fragments (in chronological order):
-    ${JSON.stringify(sortedFragments, null, 2)}
+    Bio fragments:
+    ${JSON.stringify(validFragments, null, 2)}
 
     Format your response as a JSON object with:
     - name: Character's full name
@@ -94,7 +136,7 @@ async function compileBio(fragments) {
     // Add metadata
     return {
       ...compiledBio,
-      source_files: fragments.map(f => f.source_file),
+      source_files: validFragments.map(f => f.source_file),
       generated_date: new Date().toISOString()
     };
   } catch (error) {
