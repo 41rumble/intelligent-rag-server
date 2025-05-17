@@ -48,6 +48,8 @@ async function generateEmbedding(text) {
   try {
     let embedding;
     
+    logger.debug(`Generating embedding for text (${text.length} chars) using ${LLM_PROVIDER}`);
+    
     if (LLM_PROVIDER === 'openai') {
       const response = await openaiClient.embeddings.create({
         model: OPENAI_EMBEDDING_MODEL,
@@ -55,23 +57,38 @@ async function generateEmbedding(text) {
       });
       
       embedding = response.data[0].embedding;
+      logger.debug(`OpenAI embedding generated: ${embedding.length} dimensions`);
     } else if (LLM_PROVIDER === 'ollama') {
-      // Use Ollama client for embeddings
-      const response = await ollamaClient.embed({
+      // Use direct API call to Ollama for embeddings
+      const response = await axios.post(`${OLLAMA_BASE_URL}/api/embeddings`, {
         model: OLLAMA_EMBEDDING_MODEL,
-        input: text
+        prompt: text
       });
       
-      embedding = response.embedding;
+      logger.debug('Ollama embedding response:', response.data);
+      
+      if (!response.data || !response.data.embedding) {
+        throw new Error('Invalid response from Ollama embedding API: ' + JSON.stringify(response.data));
+      }
+      
+      embedding = response.data.embedding;
+      logger.debug(`Ollama embedding generated: ${embedding ? embedding.length : 'null'} dimensions`);
     }
     
     // Validate embedding format
+    if (!embedding) {
+      throw new Error('Embedding is null or undefined');
+    }
+    
     if (!Array.isArray(embedding)) {
+      logger.error('Invalid embedding type:', typeof embedding);
+      logger.error('Embedding value:', embedding);
       throw new Error('Embedding must be an array');
     }
     
     // Convert to array of numbers if needed
     embedding = embedding.map(Number);
+    logger.debug(`Converted to numbers: ${embedding.length} dimensions`);
     
     // Validate dimensions
     if (embedding.length !== 1536) {
@@ -80,9 +97,12 @@ async function generateEmbedding(text) {
     
     // Validate all values are numbers
     if (!embedding.every(x => typeof x === 'number' && !isNaN(x))) {
+      const invalidValues = embedding.filter(x => typeof x !== 'number' || isNaN(x));
+      logger.error('Invalid values found:', invalidValues.slice(0, 5));
       throw new Error('Embedding contains non-numeric values');
     }
     
+    logger.debug('Embedding validation passed');
     return embedding;
   } catch (error) {
     logger.error('Error generating embedding:', error);
