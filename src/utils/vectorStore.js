@@ -106,7 +106,7 @@ async function addVectors(projectId, vectors, ids) {
     // Save index to disk
     const faissDataDir = process.env.FAISS_DATA_DIR || path.join(process.cwd(), 'data', 'faiss_indexes');
     const indexPath = path.join(faissDataDir, `${projectId}.index`);
-    await index.save(indexPath);
+    await faiss.writeIndex(index, indexPath);
 
     logger.info(`Added ${vectors.length} vectors to FAISS index for project ${projectId}`);
 }
@@ -153,7 +153,7 @@ async function removeVectors(projectId, ids) {
     // Save index to disk
     const faissDataDir = process.env.FAISS_DATA_DIR || path.join(process.cwd(), 'data', 'faiss_indexes');
     const indexPath = path.join(faissDataDir, `${projectId}.index`);
-    await index.save(indexPath);
+    await faiss.writeIndex(index, indexPath);
 
     logger.info(`Removed ${ids.length} vectors from FAISS index for project ${projectId}`);
 }
