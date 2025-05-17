@@ -90,9 +90,10 @@ async function generateEmbedding(text) {
     embedding = embedding.map(Number);
     logger.debug(`Converted to numbers: ${embedding.length} dimensions`);
     
-    // Validate dimensions
-    if (embedding.length !== 1536) {
-      throw new Error(`Invalid embedding dimensions: got ${embedding.length}, expected 1536`);
+    // Validate dimensions based on provider
+    const expectedDimensions = LLM_PROVIDER === 'openai' ? 1536 : 768;
+    if (embedding.length !== expectedDimensions) {
+      throw new Error(`Invalid embedding dimensions: got ${embedding.length}, expected ${expectedDimensions}`);
     }
     
     // Validate all values are numbers
