@@ -52,7 +52,7 @@ async function processSynopses() {
         text: synopsisData.synopsis,
         events: synopsisData.events,
         locations: synopsisData.locations,
-        time_period: synopsisData.time_period,
+        time_period: Array.isArray(synopsisData.time_period) ? synopsisData.time_period.join(', ') : synopsisData.time_period,
         historical_context: synopsisData.historical_context,
         story_arc_position: synopsisData.story_arc_position,
         tags: [
@@ -117,7 +117,7 @@ async function processBios() {
         text: bioData.bio,
         significance: bioData.significance,
         tags: bioData.tags || [],
-        time_period: bioData.time_period,
+        time_period: Array.isArray(bioData.time_period) ? bioData.time_period.join(', ') : bioData.time_period,
         vector_id: vectorId,
         priority: bioData.priority || 1,
         source_files: bioData.source_files || []
