@@ -151,11 +151,23 @@ async function compileBio(fragments) {
     - bio: Complete biographical text (300-500 words) that traces their journey through the story
     - character_arc: Brief description of how they change/develop through the story
     - significance: Character's role and importance in the overall narrative
-    - key_moments: Array of significant moments/turning points in their story, with chapter references
-    - relationships: How their key relationships evolve through the story
+    - key_moments: Array of objects, each containing:
+        - chapter: The chapter reference (e.g., "chapter_1", "foreword")
+        - description: Description of the significant moment/turning point
+    - relationships: Object mapping character names to relationship descriptions, e.g.:
+        {
+          "Character Name": "Description of relationship and how it evolves",
+          "Another Character": "Description of another relationship"
+        }
     - tags: Array of relevant descriptive tags
     - time_period: Historical period (e.g., "late 17th century", "Restoration period", "Tudor era") - use a descriptive period, not specific dates
     - priority: Importance level (1-3, where 1 is most important)
+
+    CRITICAL: The response must match this exact format. In particular:
+    1. key_moments must be an array of objects with both "chapter" and "description" fields
+    2. relationships must be an object with character names as keys and descriptions as values
+    3. All arrays (aliases, tags, key_moments) must not be empty - use empty arrays [] if none exist
+    4. All string fields must not be null - use empty string "" if none exists
     `;
 
     const compiledBio = await generateStructuredResponse(prompt, {
@@ -179,14 +191,87 @@ async function compileBio(fragments) {
  * Save compiled bio
  * @param {Object} bio - Compiled character bio
  */
+/**
+ * Validate and fix bio data structure
+ * @param {Object} bio - Bio data to validate
+ * @returns {Object} Validated and fixed bio data
+ */
+function validateBio(bio) {
+  if (!bio || typeof bio !== 'object') {
+    throw new Error('Bio must be an object');
+  }
+
+  // Ensure required string fields exist and are strings
+  const stringFields = ['name', 'bio', 'character_arc', 'significance', 'time_period'];
+  for (const field of stringFields) {
+    if (!bio[field]) {
+      logger.warn(`Missing ${field} in bio for ${bio.name}, setting to empty string`);
+      bio[field] = '';
+    } else if (typeof bio[field] !== 'string') {
+      logger.warn(`Converting ${field} to string in bio for ${bio.name}`);
+      bio[field] = String(bio[field]);
+    }
+  }
+
+  // Ensure arrays exist and contain correct types
+  const arrayFields = ['aliases', 'tags', 'key_moments', 'source_files'];
+  for (const field of arrayFields) {
+    if (!Array.isArray(bio[field])) {
+      logger.warn(`${field} is not an array in bio for ${bio.name}, setting to empty array`);
+      bio[field] = [];
+    }
+  }
+
+  // Validate key_moments structure
+  bio.key_moments = bio.key_moments.map(moment => {
+    if (typeof moment === 'string') {
+      // Convert string moments to proper structure
+      return {
+        chapter: 'unknown',
+        description: moment
+      };
+    }
+    if (!moment.chapter || !moment.description) {
+      logger.warn(`Invalid key_moment structure in bio for ${bio.name}, fixing`);
+      return {
+        chapter: moment.chapter || 'unknown',
+        description: moment.description || String(moment)
+      };
+    }
+    return moment;
+  });
+
+  // Validate relationships
+  if (typeof bio.relationships === 'string') {
+    // Convert string relationships to object
+    logger.warn(`Converting relationships string to object in bio for ${bio.name}`);
+    bio.relationships = {
+      "General": bio.relationships
+    };
+  } else if (!bio.relationships || typeof bio.relationships !== 'object') {
+    logger.warn(`Invalid relationships in bio for ${bio.name}, setting to empty object`);
+    bio.relationships = {};
+  }
+
+  // Ensure priority is a number
+  if (typeof bio.priority !== 'number') {
+    bio.priority = parseInt(bio.priority) || 1;
+  }
+
+  return bio;
+}
+
 async function saveBio(bio) {
   if (!bio || !bio.name) return;
   
   try {
-    const filename = `${bio.name.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, '_')}.json`;
+    // Validate and fix bio structure
+    const validatedBio = validateBio(bio);
+    
+    const filename = `${validatedBio.name.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, '_')}.json`;
     await fs.writeFile(
       path.join(compiledBiosPath, filename),
-      JSON.stringify(bio, null, 2)
+      JSON.stringify(validatedBio, null, 2)
     );
     
     logger.info(`Saved compiled bio: ${filename}`);

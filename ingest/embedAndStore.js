@@ -124,43 +124,96 @@ async function processBios() {
       // Store embedding in FAISS
       await vectorStore.addVectors(projectId, [embedding], [vectorId]);
       
-      // Process time period
-      let timePeriod = bioData.time_period;
-      if (typeof timePeriod === 'object' && timePeriod !== null) {
-        if (timePeriod.context) {
-          timePeriod = timePeriod.context;
-        } else if (timePeriod.start && timePeriod.end) {
-          timePeriod = `${timePeriod.start}-${timePeriod.end}`;
+      // Validate and transform bio data for MongoDB
+      function validateBioForMongo(bio) {
+        // Ensure required string fields exist and are strings
+        const stringFields = ['name', 'bio', 'character_arc', 'significance', 'time_period'];
+        const result = {};
+
+        for (const field of stringFields) {
+          let value = bio[field];
+          if (typeof value === 'object' && value !== null) {
+            // Handle time_period object
+            if (field === 'time_period') {
+              if (value.context) {
+                value = value.context;
+              } else if (value.start && value.end) {
+                value = `${value.start}-${value.end}`;
+              }
+            } else {
+              value = String(value);
+            }
+          }
+          result[field] = value || '';
         }
-      } else if (Array.isArray(timePeriod)) {
-        timePeriod = timePeriod.join(', ');
+
+        // Process arrays
+        result.aliases = (bio.aliases || []).map(String);
+        result.tags = (bio.tags || []).map(tag => 
+          typeof tag === 'object' ? (tag.name || tag.value || JSON.stringify(tag)) : String(tag)
+        );
+        result.source_files = (bio.source_files || []).map(String);
+
+        // Process key_moments
+        result.key_moments = (bio.key_moments || []).map(moment => {
+          if (typeof moment === 'string') {
+            return {
+              chapter: 'unknown',
+              description: moment
+            };
+          }
+          if (typeof moment !== 'object' || !moment) {
+            return {
+              chapter: 'unknown',
+              description: String(moment)
+            };
+          }
+          return {
+            chapter: String(moment.chapter || 'unknown'),
+            description: String(moment.description || moment.event || moment)
+          };
+        });
+
+        // Process relationships
+        if (typeof bio.relationships === 'string') {
+          result.relationships = {
+            "General": bio.relationships
+          };
+        } else if (!bio.relationships || typeof bio.relationships !== 'object') {
+          result.relationships = {};
+        } else {
+          // Convert all values to strings
+          result.relationships = Object.fromEntries(
+            Object.entries(bio.relationships).map(([k, v]) => [k, String(v)])
+          );
+        }
+
+        // Process priority
+        result.priority = parseInt(bio.priority) || 1;
+
+        return result;
       }
 
-      // Process tags to ensure they're strings
-      const tags = (bioData.tags || []).map(tag => 
-        typeof tag === 'object' ? (tag.name || tag.value || JSON.stringify(tag)) : String(tag)
-      );
-
-      // Process aliases to ensure they're strings
-      const aliases = (bioData.aliases || []).map(String);
+      // Validate and transform bio data
+      const validatedBio = validateBioForMongo(bioData);
 
       // Prepare document for MongoDB
       const document = {
         _id: `bio_${file.replace('.json', '')}`,
         type: 'bio',
         project: projectId,
-        name: bioData.name,
-        aliases: aliases,
-        text: bioData.bio,
-        significance: bioData.significance,
-        tags: tags,
-        time_period: timePeriod,
-        character_arc: bioData.character_arc,
-        key_moments: bioData.key_moments || [],
-        relationships: bioData.relationships || {},
+        name: validatedBio.name,
+        aliases: validatedBio.aliases,
+        text: validatedBio.bio,
+        significance: validatedBio.significance,
+        tags: validatedBio.tags,
+        time_period: validatedBio.time_period,
+        character_arc: validatedBio.character_arc,
+        key_moments: validatedBio.key_moments,
+        relationships: validatedBio.relationships,
         vector_id: vectorId,
-        priority: bioData.priority || 1,
-        source_files: bioData.source_files || []
+        priority: validatedBio.priority,
+        source_files: validatedBio.source_files
       };
       
       // Insert or update document
