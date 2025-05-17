@@ -1,8 +1,10 @@
 const fs = require('fs').promises;
 const path = require('path');
 const mongoClient = require('../src/utils/mongoClient');
+const vectorStore = require('../src/utils/vectorStore');
 const logger = require('../src/utils/logger');
 const { generateEmbedding } = require('../src/utils/llmProvider');
+const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 
 // Project ID from command line or default
@@ -36,6 +38,10 @@ async function processSynopses() {
       // Generate embedding for synopsis text
       const embeddingText = `${synopsisData.title}. ${synopsisData.synopsis}`;
       const embedding = await generateEmbedding(embeddingText);
+      const vectorId = uuidv4();
+      
+      // Store embedding in FAISS
+      await vectorStore.addVectors(projectId, [embedding], [vectorId]);
       
       // Prepare document for MongoDB
       const document = {
@@ -54,7 +60,7 @@ async function processSynopses() {
           synopsisData.time_period,
           synopsisData.story_arc_position
         ].filter(Boolean),
-        embedding: embedding,
+        vector_id: vectorId,
         priority: 2,
         source_files: [synopsisData.chapter_id]
       };
@@ -96,6 +102,10 @@ async function processBios() {
       // Generate embedding for bio text
       const embeddingText = `${bioData.name}. ${bioData.bio}`;
       const embedding = await generateEmbedding(embeddingText);
+      const vectorId = uuidv4();
+      
+      // Store embedding in FAISS
+      await vectorStore.addVectors(projectId, [embedding], [vectorId]);
       
       // Prepare document for MongoDB
       const document = {
@@ -108,7 +118,7 @@ async function processBios() {
         significance: bioData.significance,
         tags: bioData.tags || [],
         time_period: bioData.time_period,
-        embedding: embedding,
+        vector_id: vectorId,
         priority: bioData.priority || 1,
         source_files: bioData.source_files || []
       };

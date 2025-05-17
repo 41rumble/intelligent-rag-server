@@ -59,31 +59,7 @@ async function getProjectCollection(projectId) {
   return database.collection(`project_${projectId}`);
 }
 
-/**
- * Create vector index for a collection if it doesn't exist
- * @param {string} projectId - Project identifier
- */
-async function createVectorIndex(projectId) {
-  const database = await connect();
-  const collection = database.collection(`project_${projectId}`);
-  
-  // Check if index exists
-  const indexes = await collection.listIndexes().toArray();
-  const vectorIndexExists = indexes.some(index => index.name === 'vector_index');
-  
-  if (!vectorIndexExists) {
-    logger.info(`Creating vector index for project_${projectId}`);
-    await collection.createIndex(
-      { embedding: "vector" },
-      { 
-        name: "vector_index",
-        dimensions: 1536, // Adjust based on your embedding model
-        numBuckets: 16
-      }
-    );
-    logger.info(`Vector index created for project_${projectId}`);
-  }
-}
+// Vector search is now handled by FAISS in vectorStore.js
 
 /**
  * Create text indexes for a collection if they don't exist
@@ -166,8 +142,8 @@ async function initializeCollection(projectId) {
             time_period: {
               bsonType: "string"
             },
-            embedding: {
-              bsonType: "array"
+            vector_id: {
+              bsonType: "string"
             },
             priority: {
               bsonType: "int"

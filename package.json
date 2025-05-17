@@ -23,10 +23,12 @@
     "axios": "^1.6.2",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
+    "faiss-node": "^0.5.1",
     "mongodb": "^6.3.0",
     "openai": "^4.20.1",
     "winston": "^3.11.0",
-    "ollama": "^0.5.15"
+    "ollama": "^0.5.15",
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "jest": "^29.7.0",

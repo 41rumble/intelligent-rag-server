@@ -1,4 +1,5 @@
 const mongoClient = require('../utils/mongoClient');
+const vectorStore = require('../utils/vectorStore');
 const logger = require('../utils/logger');
 const { generateEmbedding } = require('../utils/llmProvider');
 require('dotenv').config();
@@ -29,31 +30,24 @@ async function vectorSearch(query, projectId, limit = 5) {
     const collection = await mongoClient.getProjectCollection(projectId);
     const queryEmbedding = await generateQueryEmbedding(query);
     
-    const results = await collection.aggregate([
-      {
-        $vectorSearch: {
-          index: 'vector_index',
-          path: 'embedding',
-          queryVector: queryEmbedding,
-          numCandidates: limit * 3,
-          limit: limit
+    // Search vectors in FAISS
+    const vectorResults = await vectorStore.searchVectors(projectId, queryEmbedding, limit);
+    
+    // Get full documents from MongoDB using vector IDs
+    const documents = await Promise.all(
+      vectorResults.map(async result => {
+        const doc = await collection.findOne({ vector_id: result.id });
+        if (doc) {
+          doc.score = result.score;
         }
-      },
-      {
-        $project: {
-          _id: 1,
-          type: 1,
-          project: 1,
-          name: 1,
-          text: 1,
-          title: 1,
-          tags: 1,
-          time_period: 1,
-          priority: 1,
-          score: { $meta: 'vectorSearchScore' }
-        }
-      }
-    ]).toArray();
+        return doc;
+      })
+    );
+    
+    // Filter out null results and sort by score
+    const results = documents
+      .filter(doc => doc !== null)
+      .sort((a, b) => b.score - a.score);
     
     logger.info('Vector search completed:', { 
       query, 
