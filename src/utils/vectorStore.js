@@ -39,7 +39,7 @@ async function initializeIndex(projectId, dimensions = null) {
 
     try {
         // Try to load existing index and metadata
-        const index = await faiss.IndexFlatL2.restore(indexPath);
+        const index = await faiss.IndexFlatL2.read(indexPath);
         const metadata = JSON.parse(await fs.readFile(metadataPath, 'utf8'));
         
         // Validate dimensions match
@@ -106,7 +106,7 @@ async function addVectors(projectId, vectors, ids) {
     // Save index to disk
     const faissDataDir = process.env.FAISS_DATA_DIR || path.join(process.cwd(), 'data', 'faiss_indexes');
     const indexPath = path.join(faissDataDir, `${projectId}.index`);
-    await faiss.writeIndex(index, indexPath);
+    await index.write(indexPath);
 
     logger.info(`Added ${vectors.length} vectors to FAISS index for project ${projectId}`);
 }
@@ -153,7 +153,7 @@ async function removeVectors(projectId, ids) {
     // Save index to disk
     const faissDataDir = process.env.FAISS_DATA_DIR || path.join(process.cwd(), 'data', 'faiss_indexes');
     const indexPath = path.join(faissDataDir, `${projectId}.index`);
-    await faiss.writeIndex(index, indexPath);
+    await index.write(indexPath);
 
     logger.info(`Removed ${ids.length} vectors from FAISS index for project ${projectId}`);
 }
