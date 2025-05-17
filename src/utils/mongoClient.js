@@ -102,15 +102,10 @@ async function initializeCollection(projectId) {
   const database = await connect();
   const collectionName = `project_${projectId}`;
   
-  // Check if collection exists
-  const collections = await database.listCollections({ name: collectionName }).toArray();
-  
-  if (collections.length === 0) {
-    logger.info(`Creating collection ${collectionName}`);
-    
-    await database.createCollection(collectionName, {
-      validator: {
-        $jsonSchema: {
+  // Define schema
+  const schema = {
+    validator: {
+      $jsonSchema: {
           bsonType: "object",
           required: ["type", "project", "text"],
           properties: {
@@ -166,9 +161,22 @@ async function initializeCollection(projectId) {
           }
         }
       }
-    });
-    
+    };
+  
+  // Check if collection exists
+  const collections = await database.listCollections({ name: collectionName }).toArray();
+  
+  if (collections.length === 0) {
+    logger.info(`Creating collection ${collectionName}`);
+    await database.createCollection(collectionName, schema);
     logger.info(`Collection ${collectionName} created with schema validation`);
+  } else {
+    logger.info(`Updating schema for collection ${collectionName}`);
+    await database.command({
+      collMod: collectionName,
+      validator: schema.validator
+    });
+    logger.info(`Schema updated for collection ${collectionName}`);
   }
   
   // Create text indexes
