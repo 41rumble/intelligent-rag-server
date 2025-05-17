@@ -30,9 +30,14 @@ async function groupBioFragments() {
       
       const key = fragment.name.toLowerCase();
       if (!fragments.has(key)) {
-        fragments.set(key, []);
+        fragments.set(key, new Map()); // Use Map to track fragments by source file
       }
-      fragments.get(key).push(fragment);
+      
+      const characterFragments = fragments.get(key);
+      // Only add fragment if we don't already have one from this source file
+      if (!characterFragments.has(fragment.source_file)) {
+        characterFragments.set(fragment.source_file, fragment);
+      }
     }
   } catch (error) {
     logger.error('Error grouping bio fragments:', error);
@@ -49,11 +54,12 @@ async function groupBioFragments() {
 async function compileBio(fragments) {
   try {
     const prompt = `
-    Compile a complete character biography from these fragments. Resolve any conflicts
-    and create a coherent narrative. Include all relevant details about the character's
-    role, significance, and historical context.
+    Compile a complete character biography from these fragments. Each fragment comes from
+    a different chapter of the source material. Combine them into a coherent narrative,
+    avoiding repetition and resolving any conflicts. Include all relevant details about
+    the character's role, significance, and historical context.
 
-    Bio fragments:
+    Bio fragments (from different chapters):
     ${JSON.stringify(fragments, null, 2)}
 
     Format your response as a JSON object with:
@@ -116,8 +122,9 @@ async function main() {
     logger.info(`Found bio fragments for ${fragmentGroups.size} characters`);
     
     // Compile and save bios
-    for (const [name, fragments] of fragmentGroups) {
-      logger.info(`Compiling bio for ${name} from ${fragments.length} fragments`);
+    for (const [name, fragmentMap] of fragmentGroups) {
+      const fragments = Array.from(fragmentMap.values());
+      logger.info(`Compiling bio for ${name} from ${fragments.length} fragments (${fragmentMap.size} unique chapters)`);
       const compiledBio = await compileBio(fragments);
       await saveBio(compiledBio);
     }
