@@ -181,38 +181,100 @@ async function generateCompletion(prompt, options = {}) {
  * @param {Object} options - Additional options
  * @returns {Promise<Object>} Generated JSON object
  */
-async function generateStructuredResponse(prompt, options = {}) {
-  try {
-    if (LLM_PROVIDER === 'openai') {
-      // OpenAI supports JSON response format natively
-      const response = await generateCompletion(prompt, {
-        ...options,
-        responseFormat: 'json_object'
-      });
-      
-      return JSON.parse(response);
-    } else if (LLM_PROVIDER === 'ollama') {
-      // For Ollama, we need to explicitly request JSON in the prompt
-      const jsonPrompt = `${prompt}\n\nRespond with valid JSON only, no other text.`;
-      
-      // Add system prompt if not provided
-      if (!options.systemPrompt) {
-        options.systemPrompt = "You are a helpful assistant that always responds with valid JSON. Never include any explanatory text outside the JSON structure.";
-      }
-      
-      const response = await generateCompletion(jsonPrompt, options);
-      
-      // Extract JSON from response (in case there's any extra text)
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('Failed to parse JSON from response');
-      }
+/**
+ * Extract JSON from a string that might contain other text
+ * @param {string} text - Text that might contain JSON
+ * @returns {string|null} Extracted JSON string or null if not found
+ */
+function extractJsonString(text) {
+  // Try to find JSON between curly braces (for objects)
+  const objMatch = text.match(/\{[\s\S]*\}/);
+  if (objMatch) {
+    try {
+      JSON.parse(objMatch[0]); // Validate it's valid JSON
+      return objMatch[0];
+    } catch (e) {
+      // If parse fails, it might be a partial match. Continue to next attempt.
     }
-  } catch (error) {
-    logger.error('Error generating structured response:', error);
-    throw error;
+  }
+  
+  // Try to find JSON between square brackets (for arrays)
+  const arrayMatch = text.match(/\[[\s\S]*\]/);
+  if (arrayMatch) {
+    try {
+      JSON.parse(arrayMatch[0]); // Validate it's valid JSON
+      return arrayMatch[0];
+    } catch (e) {
+      // If parse fails, continue to next attempt
+    }
+  }
+  
+  return null;
+}
+
+async function generateStructuredResponse(prompt, options = {}) {
+  const maxRetries = options.maxRetries || 3;
+  let lastError = null;
+  let lastResponse = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      if (LLM_PROVIDER === 'openai') {
+        // OpenAI supports JSON response format natively
+        const response = await generateCompletion(prompt, {
+          ...options,
+          responseFormat: 'json_object',
+          systemPrompt: "You are a helpful assistant that always responds with valid JSON. Never include any explanatory text outside the JSON structure."
+        });
+        
+        lastResponse = response;
+        return JSON.parse(response);
+      } else if (LLM_PROVIDER === 'ollama') {
+        // For Ollama, we need to explicitly request JSON in the prompt
+        const jsonPrompt = `
+        ${prompt}
+
+        CRITICAL: Your response must be ONLY valid JSON. No other text, no markdown.
+        The response should start with { or [ and end with } or ].
+        Do not include any explanations or text outside the JSON structure.
+        `;
+        
+        // Add system prompt if not provided
+        if (!options.systemPrompt) {
+          options.systemPrompt = "You are a helpful assistant that always responds with valid JSON. Never include any explanatory text outside the JSON structure.";
+        }
+        
+        const response = await generateCompletion(jsonPrompt, {
+          ...options,
+          temperature: options.temperature || 0.3 // Lower temperature for structured output
+        });
+        
+        lastResponse = response;
+        
+        // Try to parse the full response first
+        try {
+          return JSON.parse(response);
+        } catch (error) {
+          // If full parse fails, try to extract JSON
+          const jsonStr = extractJsonString(response);
+          if (jsonStr) {
+            return JSON.parse(jsonStr);
+          }
+          lastError = error;
+          throw new Error('No valid JSON found in response');
+        }
+      }
+    } catch (error) {
+      if (attempt === maxRetries) {
+        logger.error(`All ${maxRetries} attempts to generate structured response failed.`);
+        logger.error('Last error:', error);
+        logger.error('Last response:', lastResponse);
+        throw lastError || error;
+      }
+      logger.warn(`Attempt ${attempt}/${maxRetries} failed, retrying...`);
+      // Wait a bit before retrying, with exponential backoff
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+    }
   }
 }
 
