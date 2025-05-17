@@ -165,8 +165,7 @@ async function initializeCollection(projectId) {
     logger.info(`Collection ${collectionName} created with schema validation`);
   }
   
-  // Create indexes
-  await createVectorIndex(projectId);
+  // Create text indexes
   await createTextIndexes(projectId);
 }
 
