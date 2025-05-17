@@ -118,6 +118,9 @@ async function processBios() {
         significance: bioData.significance,
         tags: bioData.tags || [],
         time_period: Array.isArray(bioData.time_period) ? bioData.time_period.join(', ') : bioData.time_period,
+        character_arc: bioData.character_arc,
+        key_moments: bioData.key_moments || [],
+        relationships: bioData.relationships || {},
         vector_id: vectorId,
         priority: bioData.priority || 1,
         source_files: bioData.source_files || []

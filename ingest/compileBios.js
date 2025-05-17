@@ -53,20 +53,34 @@ async function groupBioFragments() {
  */
 async function compileBio(fragments) {
   try {
-    const prompt = `
-    Compile a complete character biography from these fragments. Each fragment comes from
-    a different chapter of the source material. Combine them into a coherent narrative,
-    avoiding repetition and resolving any conflicts. Include all relevant details about
-    the character's role, significance, and historical context.
+    // Sort fragments by chapter number to maintain chronological order
+    const sortedFragments = fragments.sort((a, b) => {
+      const aNum = parseInt(a.source_file.match(/\d+/)[0]);
+      const bNum = parseInt(b.source_file.match(/\d+/)[0]);
+      return aNum - bNum;
+    });
 
-    Bio fragments (from different chapters):
-    ${JSON.stringify(fragments, null, 2)}
+    const prompt = `
+    Analyze these character fragments chronologically to build a complete character arc. 
+    The fragments are ordered by chapter, showing how the character develops through the story.
+    
+    Focus on:
+    1. Character development and growth
+    2. Key turning points in their story
+    3. How their role and relationships evolve
+    4. Their overall journey through the narrative
+
+    Bio fragments (in chronological order):
+    ${JSON.stringify(sortedFragments, null, 2)}
 
     Format your response as a JSON object with:
     - name: Character's full name
     - aliases: Array of all known aliases/nicknames
-    - bio: Complete biographical text (300-500 words)
-    - significance: Character's role and importance
+    - bio: Complete biographical text (300-500 words) that traces their journey through the story
+    - character_arc: Brief description of how they change/develop through the story
+    - significance: Character's role and importance in the overall narrative
+    - key_moments: Array of significant moments/turning points in their story, with chapter references
+    - relationships: How their key relationships evolve through the story
     - tags: Array of relevant descriptive tags
     - time_period: Historical period (e.g., "late 17th century", "Restoration period", "Tudor era") - use a descriptive period, not specific dates
     - priority: Importance level (1-3, where 1 is most important)

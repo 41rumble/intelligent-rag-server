@@ -138,6 +138,27 @@ async function initializeCollection(projectId) {
               bsonType: "string",
               description: "Historical period (e.g., 'late 17th century', 'Restoration period', 'Tudor era')"
             },
+            character_arc: {
+              bsonType: "string",
+              description: "Description of how the character develops through the story"
+            },
+            key_moments: {
+              bsonType: "array",
+              items: {
+                bsonType: "object",
+                required: ["chapter", "description"],
+                properties: {
+                  chapter: { bsonType: "string" },
+                  description: { bsonType: "string" }
+                }
+              }
+            },
+            relationships: {
+              bsonType: "object",
+              patternProperties: {
+                ".*": { bsonType: "string" }
+              }
+            },
             vector_id: {
               bsonType: "string"
             },
