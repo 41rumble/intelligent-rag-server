@@ -68,7 +68,7 @@ async function compileBio(fragments) {
     - bio: Complete biographical text (300-500 words)
     - significance: Character's role and importance
     - tags: Array of relevant descriptive tags
-    - time_period: Time period(s) the character is associated with
+    - time_period: Historical period (e.g., "late 17th century", "Restoration period", "Tudor era") - use a descriptive period, not specific dates
     - priority: Importance level (1-3, where 1 is most important)
     `;
 

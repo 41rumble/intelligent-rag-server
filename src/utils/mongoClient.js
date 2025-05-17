@@ -135,13 +135,8 @@ async function initializeCollection(projectId) {
               }
             },
             time_period: {
-              oneOf: [
-                { bsonType: "string" },
-                { 
-                  bsonType: "array",
-                  items: { bsonType: "string" }
-                }
-              ]
+              bsonType: "string",
+              description: "Historical period (e.g., 'late 17th century', 'Restoration period', 'Tudor era')"
             },
             vector_id: {
               bsonType: "string"
