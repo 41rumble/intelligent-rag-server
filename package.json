@@ -6,8 +6,10 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "ingest": "node ingest/summarizeAndExtract.js",
+    "extract": "node ingest/summarizeAndExtract.js",
+    "compile": "node ingest/compileBios.js",
     "embed": "node ingest/embedAndStore.js",
+    "ingest": "npm run extract && npm run compile && npm run embed",
     "test": "jest"
   },
   "keywords": [
