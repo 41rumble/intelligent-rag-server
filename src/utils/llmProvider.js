@@ -46,13 +46,15 @@ if (LLM_PROVIDER === 'openai') {
  */
 async function generateEmbedding(text) {
   try {
+    let embedding;
+    
     if (LLM_PROVIDER === 'openai') {
       const response = await openaiClient.embeddings.create({
         model: OPENAI_EMBEDDING_MODEL,
         input: text,
       });
       
-      return response.data[0].embedding;
+      embedding = response.data[0].embedding;
     } else if (LLM_PROVIDER === 'ollama') {
       // Use Ollama client for embeddings
       const response = await ollamaClient.embed({
@@ -60,8 +62,28 @@ async function generateEmbedding(text) {
         input: text
       });
       
-      return response.embedding;
+      embedding = response.embedding;
     }
+    
+    // Validate embedding format
+    if (!Array.isArray(embedding)) {
+      throw new Error('Embedding must be an array');
+    }
+    
+    // Convert to array of numbers if needed
+    embedding = embedding.map(Number);
+    
+    // Validate dimensions
+    if (embedding.length !== 1536) {
+      throw new Error(`Invalid embedding dimensions: got ${embedding.length}, expected 1536`);
+    }
+    
+    // Validate all values are numbers
+    if (!embedding.every(x => typeof x === 'number' && !isNaN(x))) {
+      throw new Error('Embedding contains non-numeric values');
+    }
+    
+    return embedding;
   } catch (error) {
     logger.error('Error generating embedding:', error);
     throw error;

@@ -46,8 +46,19 @@ async function initializeIndex(projectId, dimensions = 1536) {
 async function addVectors(projectId, vectors, ids) {
     const index = await initializeIndex(projectId);
     
+    // Validate vectors
+    if (!Array.isArray(vectors) || vectors.length === 0) {
+        throw new Error('Vectors must be a non-empty array');
+    }
+    if (!vectors.every(v => Array.isArray(v) && v.length === 1536)) {
+        throw new Error('Each vector must be an array of 1536 numbers');
+    }
+    
+    // Convert vectors to Float32Array
+    const vectorArray = new Float32Array(vectors.flat());
+    
     // Add vectors to index
-    await index.add(vectors);
+    await index.add(vectorArray);
 
     // Save index to disk
     const faissDataDir = process.env.FAISS_DATA_DIR || path.join(process.cwd(), 'data', 'faiss_indexes');
@@ -67,7 +78,15 @@ async function addVectors(projectId, vectors, ids) {
 async function searchVectors(projectId, queryVector, k = 5) {
     const index = await initializeIndex(projectId);
     
-    const results = await index.search(queryVector, k);
+    // Validate query vector
+    if (!Array.isArray(queryVector) || queryVector.length !== 1536) {
+        throw new Error('Query vector must be an array of 1536 numbers');
+    }
+    
+    // Convert query vector to Float32Array
+    const queryArray = new Float32Array(queryVector);
+    
+    const results = await index.search(queryArray, k);
     return results.map((result, i) => ({
         id: result.id,
         score: result.score
