@@ -81,12 +81,15 @@ async function initializeIndex(projectId, dimensions = null) {
 async function addVectors(projectId, vectors, ids) {
     const index = await initializeIndex(projectId);
     
+    // Get expected dimensions
+    const expectedDimensions = getEmbeddingDimensions();
+    
     // Validate vectors
     if (!Array.isArray(vectors) || vectors.length === 0) {
         throw new Error('Vectors must be a non-empty array');
     }
-    if (!vectors.every(v => Array.isArray(v) && v.length === 1536)) {
-        throw new Error('Each vector must be an array of 1536 numbers');
+    if (!vectors.every(v => Array.isArray(v) && v.length === expectedDimensions)) {
+        throw new Error(`Each vector must be an array of ${expectedDimensions} numbers`);
     }
     
     // Convert vectors to Float32Array
@@ -113,9 +116,12 @@ async function addVectors(projectId, vectors, ids) {
 async function searchVectors(projectId, queryVector, k = 5) {
     const index = await initializeIndex(projectId);
     
+    // Get expected dimensions
+    const expectedDimensions = getEmbeddingDimensions();
+    
     // Validate query vector
-    if (!Array.isArray(queryVector) || queryVector.length !== 1536) {
-        throw new Error('Query vector must be an array of 1536 numbers');
+    if (!Array.isArray(queryVector) || queryVector.length !== expectedDimensions) {
+        throw new Error(`Query vector must be an array of ${expectedDimensions} numbers`);
     }
     
     // Convert query vector to Float32Array
