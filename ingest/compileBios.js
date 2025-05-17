@@ -81,36 +81,66 @@ async function compileBio(fragments) {
       logger.error('No valid fragments found');
       return null;
     }
-    // Extract chapter number from source file
-    function getChapterNumber(sourceFile) {
-      const match = sourceFile.match(/\d+/);
-      if (!match) {
-        logger.warn(`Could not extract chapter number from source file: ${sourceFile}`);
-        return Infinity; // Put entries without chapter numbers at the end
+    // Extract sort order from source file
+    function getSortOrder(sourceFile) {
+      // Define order for special sections
+      const specialSections = {
+        'acknowledgements': -2,
+        'foreword': -1,
+        'preface': 0,
+        'afterword': Infinity - 2,
+        'epilogue': Infinity - 1,
+        'appendix': Infinity
+      };
+
+      // Check for special sections first
+      const lowerSource = sourceFile.toLowerCase();
+      for (const [section, order] of Object.entries(specialSections)) {
+        if (lowerSource.includes(section)) {
+          return order;
+        }
       }
-      return parseInt(match[0]);
+
+      // Try to extract chapter number
+      const match = sourceFile.match(/chapter[_\s-]*(\d+)|[_\s-](\d+)(?:\.|$)/i);
+      if (match) {
+        // match[1] is from first group, match[2] from second group
+        const num = parseInt(match[1] || match[2]);
+        return num * 10; // Multiply by 10 to leave room for potential sub-chapters
+      }
+
+      logger.debug(`Using default sort order for source file: ${sourceFile}`);
+      return 1000; // Middle value for unidentified sections
     }
 
-    // Sort fragments by chapter number to maintain chronological order
+    // Sort fragments by chapter/section order
     const sortedFragments = Array.from(fragments).sort((a, b) => {
       if (!a || !b || !a.source_file || !b.source_file) {
         logger.warn('Invalid fragment found:', { a, b });
         return 0; // Keep invalid fragments in their original position
       }
-      return getChapterNumber(a.source_file) - getChapterNumber(b.source_file);
+
+      const orderA = getSortOrder(a.source_file);
+      const orderB = getSortOrder(b.source_file);
+
+      // Log sorting decisions for debugging
+      logger.debug(`Sorting ${a.source_file} (${orderA}) vs ${b.source_file} (${orderB})`);
+
+      return orderA - orderB;
     });
 
     // Use validFragments instead of original fragments
     const prompt = `
     Analyze these character fragments to build a complete character arc. 
-    The fragments are ordered chronologically where possible, showing how the character develops through the story.
+    The fragments are ordered in a logical sequence, including both chapter content and special sections like acknowledgments, forewords, and afterwords.
     
     Focus on:
-    1. Character development and growth
+    1. Character development and growth through the main narrative
     2. Key turning points in their story
     3. How their role and relationships evolve
     4. Their overall journey through the narrative
     5. Consistent characterization across all fragments
+    6. Additional context from supplementary sections (acknowledgments, forewords, etc.)
 
     Bio fragments:
     ${JSON.stringify(validFragments, null, 2)}
