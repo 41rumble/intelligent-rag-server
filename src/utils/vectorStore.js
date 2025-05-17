@@ -92,11 +92,16 @@ async function addVectors(projectId, vectors, ids) {
         throw new Error(`Each vector must be an array of ${expectedDimensions} numbers`);
     }
     
-    // Convert vectors to Float32Array
+    // Convert vectors to Float32Array and reshape for FAISS
+    const numVectors = vectors.length;
     const vectorArray = new Float32Array(vectors.flat());
+    const vectorList = Array.from(vectorArray);
+    
+    logger.debug(`Adding ${numVectors} vectors with ${expectedDimensions} dimensions each`);
+    logger.debug(`First vector sample: ${vectorList.slice(0, 5)}...`);
     
     // Add vectors to index
-    await index.add(vectorArray);
+    await index.add(vectorList);
 
     // Save index to disk
     const faissDataDir = process.env.FAISS_DATA_DIR || path.join(process.cwd(), 'data', 'faiss_indexes');
@@ -124,8 +129,8 @@ async function searchVectors(projectId, queryVector, k = 5) {
         throw new Error(`Query vector must be an array of ${expectedDimensions} numbers`);
     }
     
-    // Convert query vector to Float32Array
-    const queryArray = new Float32Array(queryVector);
+    // Convert query vector to Float32Array and then to regular array for FAISS
+    const queryArray = Array.from(new Float32Array(queryVector));
     
     const results = await index.search(queryArray, k);
     return results.map((result, i) => ({
