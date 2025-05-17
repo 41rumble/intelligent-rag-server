@@ -43,6 +43,23 @@ async function processSynopses() {
       // Store embedding in FAISS
       await vectorStore.addVectors(projectId, [embedding], [vectorId]);
       
+      // Process time period
+      let timePeriod = synopsisData.time_period;
+      if (typeof timePeriod === 'object' && timePeriod !== null) {
+        if (timePeriod.context) {
+          timePeriod = timePeriod.context;
+        } else if (timePeriod.start && timePeriod.end) {
+          timePeriod = `${timePeriod.start}-${timePeriod.end}`;
+        }
+      } else if (Array.isArray(timePeriod)) {
+        timePeriod = timePeriod.join(', ');
+      }
+
+      // Process locations into string tags
+      const locationTags = synopsisData.locations.map(loc => 
+        typeof loc === 'object' ? loc.location : loc
+      );
+
       // Prepare document for MongoDB
       const document = {
         _id: `synopsis_${synopsisData.chapter_id}`,
@@ -52,14 +69,14 @@ async function processSynopses() {
         text: synopsisData.synopsis,
         events: synopsisData.events,
         locations: synopsisData.locations,
-        time_period: Array.isArray(synopsisData.time_period) ? synopsisData.time_period.join(', ') : synopsisData.time_period,
+        time_period: timePeriod,
         historical_context: synopsisData.historical_context,
         story_arc_position: synopsisData.story_arc_position,
         tags: [
-          ...synopsisData.locations,
-          synopsisData.time_period,
+          ...locationTags,
+          timePeriod,
           synopsisData.story_arc_position
-        ].filter(Boolean),
+        ].filter(Boolean).map(String),
         vector_id: vectorId,
         priority: 2,
         source_files: [synopsisData.chapter_id]
@@ -107,17 +124,37 @@ async function processBios() {
       // Store embedding in FAISS
       await vectorStore.addVectors(projectId, [embedding], [vectorId]);
       
+      // Process time period
+      let timePeriod = bioData.time_period;
+      if (typeof timePeriod === 'object' && timePeriod !== null) {
+        if (timePeriod.context) {
+          timePeriod = timePeriod.context;
+        } else if (timePeriod.start && timePeriod.end) {
+          timePeriod = `${timePeriod.start}-${timePeriod.end}`;
+        }
+      } else if (Array.isArray(timePeriod)) {
+        timePeriod = timePeriod.join(', ');
+      }
+
+      // Process tags to ensure they're strings
+      const tags = (bioData.tags || []).map(tag => 
+        typeof tag === 'object' ? (tag.name || tag.value || JSON.stringify(tag)) : String(tag)
+      );
+
+      // Process aliases to ensure they're strings
+      const aliases = (bioData.aliases || []).map(String);
+
       // Prepare document for MongoDB
       const document = {
         _id: `bio_${file.replace('.json', '')}`,
         type: 'bio',
         project: projectId,
         name: bioData.name,
-        aliases: bioData.aliases || [],
+        aliases: aliases,
         text: bioData.bio,
         significance: bioData.significance,
-        tags: bioData.tags || [],
-        time_period: Array.isArray(bioData.time_period) ? bioData.time_period.join(', ') : bioData.time_period,
+        tags: tags,
+        time_period: timePeriod,
         character_arc: bioData.character_arc,
         key_moments: bioData.key_moments || [],
         relationships: bioData.relationships || {},

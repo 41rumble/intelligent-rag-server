@@ -134,6 +134,38 @@ async function initializeCollection(projectId) {
                 bsonType: "string"
               }
             },
+            locations: {
+              bsonType: "array",
+              items: {
+                oneOf: [
+                  { bsonType: "string" },
+                  {
+                    bsonType: "object",
+                    required: ["location"],
+                    properties: {
+                      location: { bsonType: "string" },
+                      significance: { bsonType: "string" }
+                    }
+                  }
+                ]
+              }
+            },
+            events: {
+              bsonType: "array",
+              items: {
+                oneOf: [
+                  { bsonType: "string" },
+                  {
+                    bsonType: "object",
+                    required: ["event"],
+                    properties: {
+                      event: { bsonType: "string" },
+                      significance: { bsonType: "string" }
+                    }
+                  }
+                ]
+              }
+            },
             time_period: {
               bsonType: "string",
               description: "Historical period (e.g., 'late 17th century', 'Restoration period', 'Tudor era')"
