@@ -16,11 +16,11 @@ async function initializeIndex(projectId, dimensions = 1536) {
         return indexes.get(projectId);
     }
 
-    // Create directory for FAISS indexes if it doesn't exist
-    const indexDir = path.join(process.cwd(), 'data', 'faiss_indexes');
-    await fs.mkdir(indexDir, { recursive: true });
+    // Get FAISS data directory from environment variable or use default
+    const faissDataDir = process.env.FAISS_DATA_DIR || path.join(process.cwd(), 'data', 'faiss_indexes');
+    await fs.mkdir(faissDataDir, { recursive: true });
 
-    const indexPath = path.join(indexDir, `${projectId}.index`);
+    const indexPath = path.join(faissDataDir, `${projectId}.index`);
 
     try {
         // Try to load existing index
@@ -50,7 +50,7 @@ async function addVectors(projectId, vectors, ids) {
     await index.add(vectors);
 
     // Save index to disk
-    const indexPath = path.join(process.cwd(), 'data', 'faiss_indexes', `${projectId}.index`);
+    const indexPath = path.join(faissDataDir, `${projectId}.index`);
     await index.save(indexPath);
 
     logger.info(`Added ${vectors.length} vectors to FAISS index for project ${projectId}`);
@@ -85,7 +85,7 @@ async function removeVectors(projectId, ids) {
     await index.remove(ids);
 
     // Save index to disk
-    const indexPath = path.join(process.cwd(), 'data', 'faiss_indexes', `${projectId}.index`);
+    const indexPath = path.join(faissDataDir, `${projectId}.index`);
     await index.save(indexPath);
 
     logger.info(`Removed ${ids.length} vectors from FAISS index for project ${projectId}`);
