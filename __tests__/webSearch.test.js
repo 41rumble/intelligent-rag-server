@@ -6,6 +6,17 @@ jest.mock('axios');
 describe('WebSearch', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    axios.get.mockImplementation(() => Promise.resolve({
+      data: {
+        results: [{
+          title: 'Test Result',
+          url: 'http://example.com',
+          content: 'Test content',
+          engine: 'test_engine',
+          score: 1.0
+        }]
+      }
+    }));
   });
 
   describe('cleanResult', () => {

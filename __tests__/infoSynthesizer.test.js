@@ -97,7 +97,21 @@ describe('InfoSynthesizer', () => {
 
   describe('mapRelationships', () => {
     it('should map relationships from search results', () => {
-      const relationships = infoSynthesizer.mapRelationships(mockSearchResults);
+      const mockResults = {
+        rag: [],
+        db: [{
+          source: 'db',
+          metadata: {
+            relationships: {
+              'Person A': 'Connected to Person B',
+              'Location X': 'Site of Event Y'
+            }
+          }
+        }],
+        web: []
+      };
+
+      const relationships = infoSynthesizer.mapRelationships(mockResults);
       expect(relationships).toHaveLength(2);
       
       const relationshipMap = new Map(
