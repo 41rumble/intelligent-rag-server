@@ -1,4 +1,4 @@
-{
+[{
     "id": "intelligent_rag",
     "user_id": "",
     "name": "Intelligent RAG",
@@ -16,4 +16,4 @@
     "is_global": false,
     "updated_at": 1747598592,
     "created_at": 1747598592
-}
+}]
