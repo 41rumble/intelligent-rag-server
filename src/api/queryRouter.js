@@ -180,12 +180,33 @@ ${finalPrompt.prompt}`;
       }
     }
     
-    // Return final response with source snippets
-    res.json({
+    // Format response for logging
+    const formattedResponse = {
       answer,
       source_snippets: compressedKnowledge.source_snippets || [],
       log: responseLog
-    });
+    };
+
+    // Log the formatted response
+    logger.info('\n=== Query Response ===\n' +
+      `Query: "${query}"\n\n` +
+      `Answer: ${answer}\n\n` +
+      '=== Source Snippets ===\n' +
+      (compressedKnowledge.source_snippets || [])
+        .map(snippet => 
+          `[${snippet.id}]\n` +
+          `Text: ${snippet.text}\n` +
+          `Relevance: ${snippet.relevance}\n`
+        ).join('\n') +
+      '\n=== Pipeline Steps ===\n' +
+      responseLog.steps
+        .map(step => 
+          `${step.step}:\n${JSON.stringify(step.result, null, 2)}\n`
+        ).join('\n')
+    );
+
+    // Return response
+    res.json(formattedResponse);
   } catch (error) {
     logger.error('Error processing query:', error);
     
