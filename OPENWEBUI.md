@@ -1,6 +1,6 @@
 # Open WebUI Integration Guide
 
-This guide explains how to integrate the Intelligent RAG Server with Open WebUI using the provided pipeline configuration.
+This guide explains how to integrate the Intelligent RAG Server with Open WebUI using the provided function configuration.
 
 ## Prerequisites
 
@@ -9,9 +9,9 @@ This guide explains how to integrate the Intelligent RAG Server with Open WebUI 
 3. Either OpenAI API key or Ollama setup
 4. Open WebUI installation
 
-## Pipeline Configuration
+## Function Configuration
 
-The `openwebui-pipeline.json` file provides a pipeline configuration that connects Open WebUI to the Intelligent RAG Server. 
+The `openwebui-function.json` file provides a function configuration that connects Open WebUI to the Intelligent RAG Server. 
 
 ### Parameters
 
@@ -21,6 +21,12 @@ The `openwebui-pipeline.json` file provides a pipeline configuration that connec
    - Level 2: RAG + Database relations
    - Level 3: RAG + DB + Web search
    - Level 4: Enhanced coverage with cross-validation
+
+### Example Usage
+
+The function includes two example configurations:
+1. Basic Query: Uses thinking depth 2 for standard queries
+2. Deep Analysis: Uses thinking depth 4 for complex analysis
 
 ### Setup Instructions
 
