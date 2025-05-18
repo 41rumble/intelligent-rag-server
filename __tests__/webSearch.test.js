@@ -6,18 +6,20 @@ jest.mock('axios');
 describe('WebSearch', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    axios.get.mockImplementation(() => Promise.resolve({
-      data: {
-        results: [{
-          title: 'Test Result',
-          url: 'http://example.com',
-          content: 'Test content',
-          engine: 'test_engine',
-          score: 1.0
-        }]
-      }
-    }));
   });
+
+  // Default mock implementation
+  const mockSearchResponse = {
+    data: {
+      results: [{
+        title: 'Test Result',
+        url: 'http://example.com',
+        content: 'Test content with more than 50 characters to pass the filter',
+        engine: 'test_engine',
+        score: 1.0
+      }]
+    }
+  };
 
   describe('cleanResult', () => {
     it('should clean and format search results', () => {
@@ -57,19 +59,7 @@ describe('WebSearch', () => {
 
   describe('search', () => {
     it('should perform search with correct parameters', async () => {
-      const mockResponse = {
-        data: {
-          results: [{
-            title: 'Test Result',
-            url: 'http://example.com',
-            content: 'Test content',
-            engine: 'test_engine',
-            score: 1.0
-          }]
-        }
-      };
-
-      axios.get.mockResolvedValueOnce(mockResponse);
+      axios.get.mockResolvedValueOnce(mockSearchResponse);
 
       const results = await webSearch.search('test query');
 
@@ -104,32 +94,31 @@ describe('WebSearch', () => {
 
   describe('multiSearch', () => {
     it('should aggregate results from multiple queries', async () => {
-      const mockResponses = [
-        {
-          data: {
-            results: [{
-              title: 'Result 1',
-              url: 'http://example.com/1',
-              content: 'Content 1',
-              engine: 'test_engine'
-            }]
-          }
-        },
-        {
-          data: {
-            results: [{
-              title: 'Result 2',
-              url: 'http://example.com/2',
-              content: 'Content 2',
-              engine: 'test_engine'
-            }]
-          }
+      const mockResponse1 = {
+        data: {
+          results: [{
+            title: 'Result 1',
+            url: 'http://example.com/1',
+            content: 'Content 1 with more than 50 characters to pass the content filter',
+            engine: 'test_engine'
+          }]
         }
-      ];
+      };
+
+      const mockResponse2 = {
+        data: {
+          results: [{
+            title: 'Result 2',
+            url: 'http://example.com/2',
+            content: 'Content 2 with more than 50 characters to pass the content filter',
+            engine: 'test_engine'
+          }]
+        }
+      };
 
       axios.get
-        .mockResolvedValueOnce(mockResponses[0])
-        .mockResolvedValueOnce(mockResponses[1]);
+        .mockResolvedValueOnce(mockResponse1)
+        .mockResolvedValueOnce(mockResponse2);
 
       const results = await webSearch.multiSearch(['query1', 'query2']);
 
@@ -139,32 +128,31 @@ describe('WebSearch', () => {
     });
 
     it('should remove duplicate results', async () => {
-      const mockResponses = [
-        {
-          data: {
-            results: [{
-              title: 'Result 1',
-              url: 'http://example.com/1',
-              content: 'Content 1',
-              engine: 'test_engine'
-            }]
-          }
-        },
-        {
-          data: {
-            results: [{
-              title: 'Result 1',
-              url: 'http://example.com/1',
-              content: 'Content 1',
-              engine: 'other_engine'
-            }]
-          }
+      const mockResponse1 = {
+        data: {
+          results: [{
+            title: 'Result 1',
+            url: 'http://example.com/1',
+            content: 'Content 1 with more than 50 characters to pass the content filter',
+            engine: 'test_engine'
+          }]
         }
-      ];
+      };
+
+      const mockResponse2 = {
+        data: {
+          results: [{
+            title: 'Result 1',
+            url: 'http://example.com/1',
+            content: 'Content 1 with more than 50 characters to pass the content filter',
+            engine: 'other_engine'
+          }]
+        }
+      };
 
       axios.get
-        .mockResolvedValueOnce(mockResponses[0])
-        .mockResolvedValueOnce(mockResponses[1]);
+        .mockResolvedValueOnce(mockResponse1)
+        .mockResolvedValueOnce(mockResponse2);
 
       const results = await webSearch.multiSearch(['query1', 'query2']);
 
@@ -186,7 +174,7 @@ describe('WebSearch', () => {
           results: [{
             title: 'Test Result',
             url: 'http://example.com',
-            content: 'Test content',
+            content: 'Test content with more than 50 characters to pass the content filter',
             engine: 'test_engine'
           }]
         }
