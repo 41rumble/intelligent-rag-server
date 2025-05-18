@@ -1,0 +1,17 @@
+{
+    "id": "intelligent_rag",
+    "user_id": "4fb3eabf-97d8-4d8f-af39-a618d9f22e16",
+    "name": "Intelligent RAG",
+    "type": "pipe",
+    "content": "from typing import Optional, Callable, Awaitable\nfrom pydantic import BaseModel, Field\nimport requests\n\nclass Pipe:\n    class Valves(BaseModel):\n        server_url: str = Field(default=\"http://localhost:3000\")\n        project_id: str = Field(default=\"default\")\n        thinking_depth: int = Field(default=2)\n\n    def __init__(self):\n        self.type = \"pipe\"\n        self.id = \"intelligent_rag\"\n        self.name = \"Intelligent RAG\"\n        self.valves = self.Valves()\n\n    async def pipe(self, body: dict, __user__: Optional[dict] = None, __event_emitter__: Optional[Callable[[dict], Awaitable[None]]] = None, __event_call__: Optional[Callable[[dict], Awaitable[dict]]] = None) -> Optional[dict]:\n        messages = body.get(\"messages\", [])\n        if not messages:\n            return {\"error\": \"No messages found\"}\n        \n        question = messages[-1][\"content\"]\n        try:\n            response = requests.post(\n                f\"{self.valves.server_url}/api/query\",\n                json={\"projectId\": self.valves.project_id, \"query\": question, \"thinkingDepth\": self.valves.thinking_depth},\n                headers={\"Content-Type\": \"application/json\"}\n            )\n            \n            if response.status_code == 200:\n                result = response.json()\n                body[\"messages\"].append({\"role\": \"assistant\", \"content\": result[\"answer\"]})\n                return result[\"answer\"]\n            else:\n                return {\"error\": f\"Error: {response.status_code}\"}\n        except Exception as e:\n            return {\"error\": str(e)}",
+    "meta": {
+        "description": "Chat with an intelligent RAG server"
+    },
+    "manifest": {
+        "title": "Intelligent RAG Function",
+        "author": "OpenHands",
+        "version": "0.1.0"
+    },
+    "is_active": false,
+    "is_global": false
+}
