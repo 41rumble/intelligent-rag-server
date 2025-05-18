@@ -1,11 +1,20 @@
 const MultiSourceSearch = require('../../../src/pipeline/services/multiSourceSearch');
-const { searchDocuments } = require('../../../src/utils/vectorStore');
-const { searchCollection } = require('../../../src/utils/mongoClient');
+const vectorStore = require('../../../src/utils/vectorStore');
+const mongoClient = require('../../../src/utils/mongoClient');
 const webSearch = require('../../../src/utils/webSearch');
 
-jest.mock('../../../src/utils/vectorStore');
-jest.mock('../../../src/utils/mongoClient');
-jest.mock('../../../src/utils/webSearch');
+jest.mock('../../../src/utils/vectorStore', () => ({
+  searchDocuments: jest.fn()
+}));
+
+jest.mock('../../../src/utils/mongoClient', () => ({
+  searchCollection: jest.fn()
+}));
+
+jest.mock('../../../src/utils/webSearch', () => ({
+  search: jest.fn(),
+  contextSearch: jest.fn()
+}));
 
 describe('MultiSourceSearch', () => {
   let multiSourceSearch;
@@ -18,14 +27,14 @@ describe('MultiSourceSearch', () => {
   describe('search', () => {
     it('should search all sources and combine results', async () => {
       // Mock vector store results
-      searchDocuments.mockResolvedValueOnce([{
+      vectorStore.searchDocuments.mockResolvedValueOnce([{
         content: 'RAG content',
         metadata: { source: 'document1.pdf' },
         score: 0.9
       }]);
 
       // Mock MongoDB results
-      searchCollection.mockResolvedValueOnce([{
+      mongoClient.searchCollection.mockResolvedValueOnce([{
         content: 'DB content',
         metadata: { source: 'collection1' },
         score: 0.8
@@ -51,17 +60,17 @@ describe('MultiSourceSearch', () => {
       expect(results.db).toHaveLength(1);
       expect(results.web).toHaveLength(1);
 
-      expect(searchDocuments).toHaveBeenCalledWith(query, expect.any(Object));
-      expect(searchCollection).toHaveBeenCalledWith(expect.any(String), query, expect.any(Object));
+      expect(vectorStore.searchDocuments).toHaveBeenCalledWith(query, expect.any(Object));
+      expect(mongoClient.searchCollection).toHaveBeenCalledWith(expect.any(String), query, expect.any(Object));
       expect(webSearch.search).toHaveBeenCalledWith(query, expect.any(Object));
     });
 
     it('should handle errors from individual sources', async () => {
       // Mock error from vector store
-      searchDocuments.mockRejectedValueOnce(new Error('RAG error'));
+      vectorStore.searchDocuments.mockRejectedValueOnce(new Error('RAG error'));
 
       // Mock successful results from other sources
-      searchCollection.mockResolvedValueOnce([{
+      mongoClient.searchCollection.mockResolvedValueOnce([{
         content: 'DB content',
         metadata: { source: 'collection1' },
         score: 0.8
@@ -88,8 +97,8 @@ describe('MultiSourceSearch', () => {
         sources: ['web']
       });
 
-      expect(searchDocuments).not.toHaveBeenCalled();
-      expect(searchCollection).not.toHaveBeenCalled();
+      expect(vectorStore.searchDocuments).not.toHaveBeenCalled();
+      expect(mongoClient.searchCollection).not.toHaveBeenCalled();
       expect(webSearch.search).toHaveBeenCalled();
     });
 
@@ -102,11 +111,11 @@ describe('MultiSourceSearch', () => {
 
       await multiSourceSearch.search('test query', options);
 
-      expect(searchDocuments).toHaveBeenCalledWith('test query', 
+      expect(vectorStore.searchDocuments).toHaveBeenCalledWith('test query', 
         expect.objectContaining({ limit: 5 })
       );
 
-      expect(searchCollection).toHaveBeenCalledWith(
+      expect(mongoClient.searchCollection).toHaveBeenCalledWith(
         'testCollection',
         'test query',
         expect.any(Object)
@@ -123,13 +132,13 @@ describe('MultiSourceSearch', () => {
       };
 
       // Mock successful results from all sources
-      searchDocuments.mockResolvedValueOnce([{
+      vectorStore.searchDocuments.mockResolvedValueOnce([{
         content: 'RAG content about 1922',
         metadata: { source: 'document1.pdf' },
         score: 0.9
       }]);
 
-      searchCollection.mockResolvedValueOnce([{
+      mongoClient.searchCollection.mockResolvedValueOnce([{
         content: 'DB content about Smyrna',
         metadata: { source: 'collection1' },
         score: 0.8
