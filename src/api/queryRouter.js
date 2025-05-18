@@ -125,12 +125,22 @@ router.post('/', async (req, res) => {
     
     // Step 7: Build final prompt and generate initial answer
     finalPrompt = await buildFinalPrompt(queryInfo, compressedKnowledge, webSummary);
+
+    // Add source constraints to the prompt
+    finalPrompt.prompt = `You are answering questions about the project "${projectId}". 
+IMPORTANT: Base your answer ONLY on the provided context. If the context doesn't contain enough information to fully answer the question, acknowledge the limitations and stick to what's available in the provided documents.
+DO NOT include information from your general knowledge unless it's specifically present in the provided context.
+
+${finalPrompt.prompt}`;
+
     answer = await generateFinalAnswer(finalPrompt.prompt);
     responseLog.steps.push({
       step: 'generate_initial_answer',
       result: {
         prompt_length: finalPrompt.prompt.length,
-        answer_length: answer.length
+        answer_length: answer.length,
+        context_sources: compressedKnowledge.source_ids,
+        has_web_data: !!webSummary
       }
     });
     

@@ -186,12 +186,27 @@ async function retrieveDocuments(query, queryInfo, limit = 10) {
   try {
     const projectId = queryInfo.project_id;
     
+    logger.info('Starting parallel document retrieval:', {
+      query,
+      project_id: projectId,
+      search_types: ['vector', 'metadata', 'text']
+    });
+
     // Run searches in parallel
     const [vectorResults, metadataResults, textResults] = await Promise.all([
       vectorSearch(query, projectId, limit),
       metadataSearch(queryInfo, limit),
       textSearch(query, projectId, limit)
     ]);
+
+    logger.info('Individual search results:', {
+      vector_count: vectorResults.length,
+      vector_ids: vectorResults.map(doc => doc._id),
+      metadata_count: metadataResults.length,
+      metadata_ids: metadataResults.map(doc => doc._id),
+      text_count: textResults.length,
+      text_ids: textResults.map(doc => doc._id)
+    });
     
     // Combine and deduplicate results
     const combinedResults = combineResults([
@@ -206,7 +221,12 @@ async function retrieveDocuments(query, queryInfo, limit = 10) {
     logger.info('Document retrieval completed:', { 
       query,
       project_id: projectId,
-      results_count: finalResults.length
+      total_results_before_dedup: vectorResults.length + metadataResults.length + textResults.length,
+      unique_results: combinedResults.length,
+      final_results: finalResults.length,
+      final_doc_types: finalResults.map(doc => doc.type),
+      final_doc_ids: finalResults.map(doc => doc._id),
+      final_priorities: finalResults.map(doc => doc.priority)
     });
     
     return finalResults;
