@@ -118,9 +118,13 @@ describe('InfoSynthesizer', () => {
         relationships.map(r => [r.entities.sort().join('::'), r])
       );
 
-      expect(relationshipMap.has('Location X::Person A')).toBe(true);
-      expect(relationshipMap.get('Location X::Person A').descriptions)
+      expect(relationshipMap.has('Person A::Person B')).toBe(true);
+      expect(relationshipMap.get('Person A::Person B').descriptions)
         .toContain('Connected to Person B');
+      
+      expect(relationshipMap.has('Event Y::Location X')).toBe(true);
+      expect(relationshipMap.get('Event Y::Location X').descriptions)
+        .toContain('Site of Event Y');
     });
 
     it('should handle missing relationships', () => {

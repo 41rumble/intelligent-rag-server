@@ -122,12 +122,16 @@ class InfoSynthesizer {
     for (const result of [...searchResults.rag, ...searchResults.db]) {
       if (result.metadata.relationships) {
         Object.entries(result.metadata.relationships).forEach(([entity, description]) => {
-          addRelationship(
-            result.metadata.title,
-            entity,
-            description,
-            result.source
-          );
+          // For each relationship, create a connection between the entities
+          const relatedEntities = description.match(/(?:Connected to|Site of) ([^.]+)/);
+          if (relatedEntities) {
+            addRelationship(
+              entity,
+              relatedEntities[1],
+              description,
+              result.source
+            );
+          }
         });
       }
     }
