@@ -35,8 +35,13 @@ async function processSynopses() {
       const filePath = path.join(synopsesPath, file);
       const synopsisData = JSON.parse(await fs.readFile(filePath, 'utf8'));
       
-      // Generate embedding for synopsis text
-      const embeddingText = `${synopsisData.title}. ${synopsisData.synopsis}`;
+      // Generate embedding for synopsis and full text if available
+      let embeddingText = `${synopsisData.title}. ${synopsisData.synopsis}`;
+      if (synopsisData.full_text) {
+        // If full text is available, include first ~1000 chars in embedding
+        const previewText = synopsisData.full_text.slice(0, 1000);
+        embeddingText = `${synopsisData.title}. ${previewText}. ${synopsisData.synopsis}`;
+      }
       const embedding = await generateEmbedding(embeddingText);
       const vectorId = uuidv4();
       
@@ -66,12 +71,14 @@ async function processSynopses() {
         type: 'chapter_synopsis',
         project: projectId,
         title: synopsisData.title,
-        text: synopsisData.synopsis,
-        events: synopsisData.events,
-        locations: synopsisData.locations,
+        text: synopsisData.synopsis, // Keep text field for backward compatibility
+        synopsis: synopsisData.synopsis,
+        full_text: synopsisData.full_text || '',
+        events: synopsisData.events || [],
+        locations: synopsisData.locations || [],
         time_period: timePeriod,
-        historical_context: synopsisData.historical_context,
-        story_arc_position: synopsisData.story_arc_position,
+        historical_context: synopsisData.historical_context || '',
+        story_arc_position: synopsisData.story_arc_position || '',
         tags: [
           ...locationTags,
           timePeriod,

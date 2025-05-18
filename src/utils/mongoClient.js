@@ -128,6 +128,14 @@ async function initializeCollection(projectId) {
             text: {
               bsonType: "string"
             },
+            full_text: {
+              bsonType: "string",
+              description: "Full chapter text when available"
+            },
+            synopsis: {
+              bsonType: "string",
+              description: "Chapter synopsis or summary"
+            },
             tags: {
               bsonType: "array",
               items: {
