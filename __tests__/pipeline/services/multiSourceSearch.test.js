@@ -145,7 +145,13 @@ describe('MultiSourceSearch', () => {
       }]);
 
       // Mock MongoDB document retrieval for RAG search
-      mongoClient.getProjectCollection().find().toArray.mockResolvedValueOnce([{
+      const mockCollection = {
+        find: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        toArray: jest.fn()
+      };
+      mockCollection.toArray.mockResolvedValueOnce([{
         vector_id: 'vec1',
         text: 'RAG content',
         type: 'document',
@@ -155,6 +161,7 @@ describe('MultiSourceSearch', () => {
         events: ['Great Fire'],
         source_files: ['doc1.pdf']
       }]);
+      mongoClient.getProjectCollection.mockReturnValue(mockCollection);
 
       const results = await multiSourceSearch.search(query, 1);
 
@@ -164,7 +171,8 @@ describe('MultiSourceSearch', () => {
 
       // Verify only RAG search was called
       expect(vectorStore.searchVectors).toHaveBeenCalledTimes(1);
-      expect(mongoClient.getProjectCollection).toHaveBeenCalledTimes(1);
+      expect(mongoClient.getProjectCollection).toHaveBeenCalledTimes(2); // Called for both RAG and DB search
+      expect(mockCollection.find).toHaveBeenCalledTimes(1); // But find() only called once for RAG
       expect(webSearch.contextSearch).not.toHaveBeenCalled();
     });
 
