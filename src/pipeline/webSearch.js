@@ -11,8 +11,7 @@ const searxngInstance = process.env.SEARXNG_INSTANCE;
 const axiosInstance = axios.create({
   httpsAgent: new https.Agent({
     rejectUnauthorized: false, // Allow self-signed certificates
-    secureProtocol: 'TLS_method', // Use latest TLS
-    minVersion: 'TLSv1.2'
+    // Using Node's default secure context which automatically selects the best protocol
   }),
   timeout: 10000, // 10 second timeout
   maxRedirects: 5
@@ -109,9 +108,13 @@ async function performWebSearch(query, numResults = 5) {
 
     // Check for specific error types
     if (error.code === 'EPROTO') {
-      logger.error('SSL/TLS protocol error. Please check the SearXNG instance configuration and ensure it supports TLS 1.2 or higher.');
+      logger.error('SSL/TLS protocol error. The server might not support HTTPS or is using an incompatible protocol.');
     } else if (error.code === 'ECONNREFUSED') {
       logger.error('Connection refused. Please verify the SearXNG instance is running and accessible.');
+    } else if (error.code === 'ERR_TLS_PROTOCOL_VERSION_CONFLICT') {
+      logger.error('TLS protocol version conflict. Using default secure configuration.');
+    } else if (error.code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
+      logger.error('Unable to verify SSL certificate. This is expected for self-signed certificates.');
     } else if (error.response?.status === 429) {
       logger.error('Rate limit exceeded. Consider reducing request frequency or increasing rate limits.');
     }
