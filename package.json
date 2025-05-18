@@ -11,7 +11,9 @@
     "compile": "node ingest/compileBios.js",
     "embed": "node ingest/embedAndStore.js",
     "ingest": "npm run extract && npm run extract-bios && npm run compile && npm run embed",
-    "test": "jest"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "keywords": [
     "rag",

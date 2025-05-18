@@ -143,14 +143,35 @@ Response:
 
 | Level | Description                                        |
 | ----- | -------------------------------------------------- |
-| 0     | Shallow RAG (vector + priority metadata retrieval) |
-| 2     | Rephrase query to improve relevance                |
-| 4     | Generate branch queries (semantically linked)      |
-| 5     | Fetch knowledge for each sub-query                 |
-| 7     | External search (e.g., SearXNG) and summarization  |
-| 8     | Merge and compress context into Knowledge Lumps    |
-| 9     | Evaluate answers; retry failed branches            |
-| 10    | Compose a final reflective answer via LLM          |
+| 1     | Basic RAG (vector similarity + top 3 chunks)       |
+| 2     | RAG + DB Relations (entity extraction, mapping)    |
+| 3     | RAG + DB + Web (SearXNG integration, synthesis)    |
+| 4     | Enhanced Coverage (more sources, cross-validation)  |
+
+Each level builds on the previous one, adding more sophisticated processing:
+
+### Level 1: Basic RAG
+- Direct vector similarity search
+- Top 3 most relevant chunks
+- Simple answer generation
+
+### Level 2: RAG + DB Relations
+- Everything from Level 1
+- Entity extraction
+- Relationship mapping
+- Database lookups
+
+### Level 3: RAG + DB + Web
+- Everything from Level 2
+- Web search integration (SearXNG)
+- Information synthesis
+- Structured summaries
+
+### Level 4: Enhanced Coverage
+- Everything from Level 3
+- Increased search depth (K=7)
+- More web sources
+- Cross-validation
 
 ## 🧪 API Endpoints
 
