@@ -171,8 +171,8 @@ describe('MultiSourceSearch', () => {
 
       // Verify only RAG search was called
       expect(vectorStore.searchVectors).toHaveBeenCalledTimes(1);
-      expect(mongoClient.getProjectCollection).toHaveBeenCalledTimes(2); // Called for both RAG and DB search
-      expect(mockCollection.find).toHaveBeenCalledTimes(1); // But find() only called once for RAG
+      expect(mongoClient.getProjectCollection).toHaveBeenCalledTimes(1); // Called only for RAG search at level 1
+      expect(mockCollection.find).toHaveBeenCalledTimes(1); // Called once for RAG search
       expect(webSearch.contextSearch).not.toHaveBeenCalled();
     });
 
