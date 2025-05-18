@@ -1,0 +1,25 @@
+{
+  "name": "intelligent_rag_query",
+  "description": "Query the intelligent RAG server",
+  "parameters": [
+    {
+      "name": "projectId",
+      "type": "string",
+      "description": "The project ID to query against",
+      "required": true
+    },
+    {
+      "name": "thinkingDepth",
+      "type": "integer",
+      "description": "Depth of thinking (1-4). Higher values use more sophisticated processing",
+      "default": 2,
+      "min": 1,
+      "max": 4
+    }
+  ],
+  "url": "http://localhost:3000/api/query",
+  "method": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  }
+}
