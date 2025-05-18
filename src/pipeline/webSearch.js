@@ -45,7 +45,11 @@ async function performWebSearch(query, numResults = 5) {
       source: 'web_search'
     }));
   } catch (error) {
-    logger.error('Error performing web search:', error);
+    logger.error('Error performing web search:', {
+      message: error.message,
+      code: error.code,
+      status: error.response?.status
+    });
     return [];
   }
 }
@@ -106,7 +110,11 @@ async function summarizeWebResults(searchResults, originalQuery) {
       query: originalQuery
     };
   } catch (error) {
-    logger.error('Error summarizing web results:', error);
+    logger.error('Error summarizing web results:', {
+      message: error.message,
+      code: error.code,
+      type: error.type
+    });
     return {
       summary: 'Failed to summarize web search results due to an error.',
       facts: [],
@@ -129,7 +137,11 @@ async function searchAndSummarize(query) {
     
     return summary;
   } catch (error) {
-    logger.error('Error in search and summarize:', error);
+    logger.error('Error in search and summarize:', {
+      message: error.message,
+      code: error.code,
+      type: error.type
+    });
     return {
       summary: 'Failed to retrieve and summarize web information.',
       facts: [],
