@@ -1,10 +1,55 @@
 const axios = require('axios');
+const https = require('https');
 const logger = require('../utils/logger');
 const { generateStructuredResponse } = require('../utils/llmProvider');
 require('dotenv').config();
 
 // SearXNG instance URL
 const searxngInstance = process.env.SEARXNG_INSTANCE;
+
+// Axios instance with custom config
+const axiosInstance = axios.create({
+  httpsAgent: new https.Agent({
+    rejectUnauthorized: false, // Allow self-signed certificates
+    secureProtocol: 'TLS_method', // Use latest TLS
+    minVersion: 'TLSv1.2'
+  }),
+  timeout: 10000, // 10 second timeout
+  maxRedirects: 5
+});
+
+// Retry configuration
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+
+/**
+ * Sleep function for retry delay
+ * @param {number} ms - Milliseconds to sleep
+ * @returns {Promise} Promise that resolves after ms milliseconds
+ */
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Perform request with retry logic
+ * @param {Function} requestFn - Function that returns a promise
+ * @param {number} retries - Number of retries remaining
+ * @returns {Promise} Promise that resolves with the response
+ */
+async function withRetry(requestFn, retries = MAX_RETRIES) {
+  try {
+    return await requestFn();
+  } catch (error) {
+    if (retries > 0) {
+      logger.warn(`Request failed, retrying... (${retries} attempts remaining)`, {
+        error: error.message,
+        code: error.code
+      });
+      await sleep(RETRY_DELAY);
+      return withRetry(requestFn, retries - 1);
+    }
+    throw error;
+  }
+}
 
 /**
  * Perform a web search using SearXNG
@@ -18,8 +63,11 @@ async function performWebSearch(query, numResults = 5) {
       logger.warn('SearXNG instance URL not configured');
       return [];
     }
+
+    // Validate and sanitize the URL
+    const searchUrl = new URL('/search', searxngInstance).toString();
     
-    const response = await axios.get(`${searxngInstance}/search`, {
+    const makeRequest = () => axiosInstance.get(searchUrl, {
       params: {
         q: query,
         format: 'json',
@@ -28,14 +76,17 @@ async function performWebSearch(query, numResults = 5) {
         time_range: '',
         engines: 'google,bing,duckduckgo',
         max_results: numResults
-      }
+      },
+      validateStatus: status => status >= 200 && status < 300
     });
-    
+
+    const response = await withRetry(makeRequest);
     const results = response.data.results || [];
     
     logger.info('Web search completed:', { 
       query, 
-      results_count: results.length
+      results_count: results.length,
+      instance: searxngInstance
     });
     
     return results.map(result => ({
@@ -45,11 +96,26 @@ async function performWebSearch(query, numResults = 5) {
       source: 'web_search'
     }));
   } catch (error) {
-    logger.error('Error performing web search:', {
+    const errorDetails = {
       message: error.message,
       code: error.code,
-      status: error.response?.status
-    });
+      status: error.response?.status,
+      protocol: error.protocol,
+      instance: searxngInstance
+    };
+
+    // Log detailed error for debugging
+    logger.error('Error performing web search:', errorDetails);
+
+    // Check for specific error types
+    if (error.code === 'EPROTO') {
+      logger.error('SSL/TLS protocol error. Please check the SearXNG instance configuration and ensure it supports TLS 1.2 or higher.');
+    } else if (error.code === 'ECONNREFUSED') {
+      logger.error('Connection refused. Please verify the SearXNG instance is running and accessible.');
+    } else if (error.response?.status === 429) {
+      logger.error('Rate limit exceeded. Consider reducing request frequency or increasing rate limits.');
+    }
+
     return [];
   }
 }
