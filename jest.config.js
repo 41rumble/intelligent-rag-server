@@ -32,7 +32,7 @@ module.exports = {
   ],
 
   // The test environment setup file
-  setupFilesAfterEnv: ['<rootDir>/__tests__/setup.js'],
+  setupFilesAfterEnv: ['<rootDir>/test/setup.js'],
 
   // Automatically clear mock calls and instances between every test
   clearMocks: true,
