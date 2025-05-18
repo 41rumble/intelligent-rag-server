@@ -138,11 +138,34 @@ describe('MultiSourceSearch', () => {
         temporal_queries: []
       };
 
+      // Mock vector store results for RAG search
+      vectorStore.searchVectors.mockResolvedValueOnce([{
+        id: 'vec1',
+        score: 0.9
+      }]);
+
+      // Mock MongoDB document retrieval for RAG search
+      mongoClient.getProjectCollection().find().toArray.mockResolvedValueOnce([{
+        vector_id: 'vec1',
+        text: 'RAG content',
+        type: 'document',
+        title: 'Test Doc',
+        time_period: '1922',
+        locations: ['Smyrna'],
+        events: ['Great Fire'],
+        source_files: ['doc1.pdf']
+      }]);
+
       const results = await multiSourceSearch.search(query, 1);
 
       expect(results.rag).toHaveLength(1);
       expect(results.db).toHaveLength(0);
       expect(results.web).toHaveLength(0);
+
+      // Verify only RAG search was called
+      expect(vectorStore.searchVectors).toHaveBeenCalledTimes(1);
+      expect(mongoClient.getProjectCollection).toHaveBeenCalledTimes(1);
+      expect(webSearch.contextSearch).not.toHaveBeenCalled();
     });
 
     it('should apply source-specific options', async () => {
