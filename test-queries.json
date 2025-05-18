@@ -1,0 +1,66 @@
+{
+  "level1_queries": [
+    {
+      "projectId": "the_great_fire",
+      "query": "What happened in Smyrna in September 1922?",
+      "thinkingDepth": 1,
+      "expected_sources": ["rag"],
+      "description": "Basic factual query about specific event"
+    },
+    {
+      "projectId": "the_great_fire",
+      "query": "Who was Chrysostomos of Smyrna?",
+      "thinkingDepth": 1,
+      "expected_sources": ["rag"],
+      "description": "Biographical information retrieval"
+    }
+  ],
+  "level2_queries": [
+    {
+      "projectId": "the_great_fire",
+      "query": "What was the relationship between the Greek army's retreat and the events in Smyrna?",
+      "thinkingDepth": 3,
+      "expected_sources": ["rag", "db"],
+      "description": "Relationship analysis between events"
+    },
+    {
+      "projectId": "the_great_fire",
+      "query": "Compare the accounts of Greek and Turkish sources about the fire's origin",
+      "thinkingDepth": 3,
+      "expected_sources": ["rag", "db"],
+      "description": "Multi-perspective analysis"
+    }
+  ],
+  "level3_queries": [
+    {
+      "projectId": "the_great_fire",
+      "query": "How did the international community respond to the Smyrna catastrophe?",
+      "thinkingDepth": 5,
+      "expected_sources": ["rag", "db", "web"],
+      "description": "International context and response"
+    },
+    {
+      "projectId": "the_great_fire",
+      "query": "What impact did the Smyrna catastrophe have on Greek-Turkish relations in subsequent decades?",
+      "thinkingDepth": 5,
+      "expected_sources": ["rag", "db", "web"],
+      "description": "Long-term impact analysis"
+    }
+  ],
+  "level4_queries": [
+    {
+      "projectId": "the_great_fire",
+      "query": "Analyze how the Smyrna catastrophe influenced population movements and demographic changes in both Greece and Turkey through the 20th century",
+      "thinkingDepth": 7,
+      "expected_sources": ["rag", "db", "web"],
+      "description": "Complex demographic analysis"
+    },
+    {
+      "projectId": "the_great_fire",
+      "query": "What parallels can be drawn between the Smyrna catastrophe and other historical urban destructions in terms of humanitarian impact and international response?",
+      "thinkingDepth": 9,
+      "expected_sources": ["rag", "db", "web"],
+      "description": "Comparative historical analysis"
+    }
+  ]
+}

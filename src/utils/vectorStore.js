@@ -133,9 +133,9 @@ async function searchVectors(projectId, queryVector, k = 5) {
     const queryArray = Array.from(new Float32Array(queryVector));
     
     const results = await index.search(queryArray, k);
-    return results.map((result, i) => ({
-        id: result.id,
-        score: result.score
+    return results.labels.map((label, i) => ({
+        id: label.toString(),
+        score: results.distances[i]
     }));
 }
 
