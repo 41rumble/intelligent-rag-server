@@ -65,10 +65,8 @@ async function generateEmbedding(text) {
         prompt: text
       });
       
-      logger.debug('Ollama embedding response:', response.data);
-      
       if (!response.data || !response.data.embedding) {
-        throw new Error('Invalid response from Ollama embedding API: ' + JSON.stringify(response.data));
+        throw new Error('Invalid response from Ollama embedding API');
       }
       
       embedding = response.data.embedding;
@@ -88,7 +86,6 @@ async function generateEmbedding(text) {
     
     // Convert to array of numbers if needed
     embedding = embedding.map(Number);
-    logger.debug(`Converted to numbers: ${embedding.length} dimensions`);
     
     // Validate dimensions based on provider
     const expectedDimensions = LLM_PROVIDER === 'openai' ? 1536 : 768;
@@ -98,12 +95,8 @@ async function generateEmbedding(text) {
     
     // Validate all values are numbers
     if (!embedding.every(x => typeof x === 'number' && !isNaN(x))) {
-      const invalidValues = embedding.filter(x => typeof x !== 'number' || isNaN(x));
-      logger.error('Invalid values found:', invalidValues.slice(0, 5));
       throw new Error('Embedding contains non-numeric values');
     }
-    
-    logger.debug('Embedding validation passed');
     return embedding;
   } catch (error) {
     logger.error('Error generating embedding:', error);
