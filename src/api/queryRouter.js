@@ -180,9 +180,10 @@ ${finalPrompt.prompt}`;
       }
     }
     
-    // Return final response
+    // Return final response with source snippets
     res.json({
       answer,
+      source_snippets: compressedKnowledge.source_snippets || [],
       log: responseLog
     });
   } catch (error) {

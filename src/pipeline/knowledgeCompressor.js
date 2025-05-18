@@ -14,7 +14,8 @@ async function compressKnowledge(documents, query) {
       return {
         compressed_text: 'No relevant information found.',
         key_points: [],
-        source_ids: []
+        source_ids: [],
+        source_snippets: []
       };
     }
     
@@ -50,6 +51,10 @@ async function compressKnowledge(documents, query) {
     - compressed_text: A coherent, comprehensive answer to the query
     - key_points: An array of the most important points
     - source_ids: An array of the document IDs that were most relevant
+    - source_snippets: An array of objects, each containing:
+      * id: The document ID
+      * text: A relevant snippet from the source (max 100 words)
+      * relevance: Brief explanation of how this snippet supports the answer
     `;
 
     const result = await generateStructuredResponse(prompt, {
@@ -138,6 +143,10 @@ async function handleOversizedContext(documents, query) {
     - compressed_text: A coherent, comprehensive answer to the query
     - key_points: An array of the most important points
     - source_ids: An array of the document IDs that were most relevant
+    - source_snippets: An array of objects, each containing:
+      * id: The document ID
+      * text: A relevant snippet from the source (max 100 words)
+      * relevance: Brief explanation of how this snippet supports the answer
     `;
 
     const result = await generateStructuredResponse(finalPrompt, {
@@ -162,7 +171,8 @@ async function handleOversizedContext(documents, query) {
     return {
       compressed_text: 'Failed to process oversized context due to an error.',
       key_points: [],
-      source_ids: []
+      source_ids: [],
+      source_snippets: []
     };
   }
 }
