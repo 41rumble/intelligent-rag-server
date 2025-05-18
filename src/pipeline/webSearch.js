@@ -1,5 +1,4 @@
 const axios = require('axios');
-const https = require('https');
 const logger = require('../utils/logger');
 const { generateStructuredResponse } = require('../utils/llmProvider');
 require('dotenv').config();
@@ -9,10 +8,6 @@ const searxngInstance = process.env.SEARXNG_INSTANCE;
 
 // Axios instance with custom config
 const axiosInstance = axios.create({
-  httpsAgent: new https.Agent({
-    rejectUnauthorized: false, // Allow self-signed certificates
-    // Using Node's default secure context which automatically selects the best protocol
-  }),
   timeout: 10000, // 10 second timeout
   maxRedirects: 5
 });
@@ -64,7 +59,13 @@ async function performWebSearch(query, numResults = 5) {
     }
 
     // Validate and sanitize the URL
-    const searchUrl = new URL('/search', searxngInstance).toString();
+    let searchUrl;
+    if (searxngInstance.includes('localhost')) {
+      // Force HTTP for localhost
+      searchUrl = new URL('/search', searxngInstance.replace('https://', 'http://')).toString();
+    } else {
+      searchUrl = new URL('/search', searxngInstance).toString();
+    }
     
     const makeRequest = () => axiosInstance.get(searchUrl, {
       params: {
