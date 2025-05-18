@@ -1,0 +1,24 @@
+{
+    "name": "intelligent_rag",
+    "description": "Query the intelligent RAG server for enhanced search and reasoning",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "projectId": {
+                "type": "string",
+                "description": "The project ID to query against"
+            },
+            "query": {
+                "type": "string",
+                "description": "The query to send to the RAG server"
+            },
+            "thinkingDepth": {
+                "type": "integer",
+                "description": "Depth of thinking (1-4). Higher values use more sophisticated processing",
+                "enum": [1, 2, 3, 4],
+                "default": 2
+            }
+        },
+        "required": ["projectId", "query"]
+    }
+}
