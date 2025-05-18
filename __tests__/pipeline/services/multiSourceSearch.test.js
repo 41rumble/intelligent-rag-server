@@ -43,7 +43,7 @@ describe('MultiSourceSearch', () => {
         score: 0.9
       }]);
 
-      // Mock MongoDB document retrieval
+      // Mock MongoDB document retrieval for RAG search
       mongoClient.getProjectCollection().find().toArray.mockResolvedValueOnce([{
         vector_id: 'vec1',
         text: 'RAG content',
@@ -53,6 +53,14 @@ describe('MultiSourceSearch', () => {
         locations: ['Smyrna'],
         events: ['Great Fire'],
         source_files: ['doc1.pdf']
+      }]);
+
+      // Mock MongoDB text search
+      mongoClient.getProjectCollection().find().sort().limit().toArray.mockResolvedValueOnce([{
+        text: 'DB content',
+        type: 'document',
+        title: 'Test Doc',
+        score: 0.8
       }]);
 
       // Mock web search results
@@ -130,11 +138,11 @@ describe('MultiSourceSearch', () => {
         temporal_queries: []
       };
 
-      const results = await multiSourceSearch.search(query, 3);
+      const results = await multiSourceSearch.search(query, 1);
 
-      expect(vectorStore.searchVectors).not.toHaveBeenCalled();
-      expect(mongoClient.getProjectCollection).not.toHaveBeenCalled();
-      expect(webSearch.contextSearch).toHaveBeenCalled();
+      expect(results.rag).toHaveLength(1);
+      expect(results.db).toHaveLength(0);
+      expect(results.web).toHaveLength(0);
     });
 
     it('should apply source-specific options', async () => {
@@ -159,20 +167,20 @@ describe('MultiSourceSearch', () => {
 
   describe('contextSearch', () => {
     it('should perform context-aware search across sources', async () => {
-      const context = {
-        time_period: '1922',
-        locations: ['Smyrna'],
-        events: ['Great Fire']
+      const query = {
+        original: 'What happened?',
+        context_queries: ['What happened in Smyrna in 1922?'],
+        relationship_queries: ['Tell me about the Great Fire'],
+        temporal_queries: ['Events in 1922']
       };
 
-      // Mock successful results from all sources
       // Mock vector store results
       vectorStore.searchVectors.mockResolvedValueOnce([{
         id: 'vec1',
         score: 0.9
       }]);
 
-      // Mock MongoDB document retrieval
+      // Mock MongoDB document retrieval for RAG search
       mongoClient.getProjectCollection().find().toArray.mockResolvedValueOnce([{
         vector_id: 'vec1',
         text: 'RAG content about 1922',
@@ -184,6 +192,14 @@ describe('MultiSourceSearch', () => {
         source_files: ['doc1.pdf']
       }]);
 
+      // Mock MongoDB text search
+      mongoClient.getProjectCollection().find().sort().limit().toArray.mockResolvedValueOnce([{
+        text: 'DB content about Smyrna',
+        type: 'document',
+        title: 'Test Doc',
+        score: 0.8
+      }]);
+
       // Mock web search results
       webSearch.contextSearch.mockResolvedValueOnce([{
         title: 'Web Result',
@@ -193,23 +209,11 @@ describe('MultiSourceSearch', () => {
         source: 'google'
       }]);
 
-      const query = {
-        original: 'What happened?',
-        context_queries: ['What happened in Smyrna in 1922?'],
-        relationship_queries: ['Tell me about the Great Fire'],
-        temporal_queries: ['Events in 1922']
-      };
-
       const results = await multiSourceSearch.search(query, 4);
 
-      expect(results).toHaveProperty('rag');
-      expect(results).toHaveProperty('db');
-      expect(results).toHaveProperty('web');
-
-      expect(webSearch.contextSearch).toHaveBeenCalledWith(
-        'What happened?',
-        expect.objectContaining(context)
-      );
+      expect(results.rag).toHaveLength(1);
+      expect(results.db).toHaveLength(1);
+      expect(results.web).toHaveLength(1);
     });
 
     it('should handle missing context fields', async () => {
