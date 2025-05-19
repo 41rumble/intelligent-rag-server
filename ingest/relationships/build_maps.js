@@ -1,6 +1,6 @@
-const { buildCharacterRelationships } = require('../relationships/builders');
-const { getProjectCollection } = require('../utils/mongoClient');
-const logger = require('../utils/logger');
+const { buildCharacterRelationships } = require('../../src/relationships/builders');
+const { getProjectCollection } = require('../../src/utils/mongoClient');
+const logger = require('../../src/utils/logger');
 
 /**
  * Preprocess and save relationship maps for a project
