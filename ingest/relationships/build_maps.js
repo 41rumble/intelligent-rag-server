@@ -15,23 +15,7 @@ async function buildAndSaveRelationshipMaps(projectId) {
         const projectDir = path.join(process.cwd(), 'ingest', projectId);
         logger.info(`Reading data from ${projectDir}`);
         
-        // Read bios
-        const biosPath = path.join(projectDir, 'bios');
-        const bios = [];
-        try {
-            const bioFiles = await fs.readdir(biosPath);
-            for (const file of bioFiles) {
-                if (file.endsWith('.json')) {
-                    const bioData = await fs.readFile(path.join(biosPath, file), 'utf8');
-                    bios.push(JSON.parse(bioData));
-                }
-            }
-            logger.info(`Found ${bios.length} character bios`);
-        } catch (error) {
-            logger.warn(`No bios found in ${biosPath}: ${error.message}`);
-        }
-        
-        // Read chapters
+        // Read chapters first since we need them for bio extraction
         const chaptersPath = path.join(projectDir, 'chapters');
         const chapters = [];
         try {
@@ -51,8 +35,26 @@ async function buildAndSaveRelationshipMaps(projectId) {
         } catch (error) {
             logger.warn(`No chapters found in ${chaptersPath}: ${error.message}`);
         }
+
+        // Now get or generate bios
+        let bios = [];
         
-        // Create bios from character names in text
+        // Try reading existing bios first
+        const biosPath = path.join(projectDir, 'bios');
+        try {
+            const bioFiles = await fs.readdir(biosPath);
+            for (const file of bioFiles) {
+                if (file.endsWith('.json')) {
+                    const bioData = await fs.readFile(path.join(biosPath, file), 'utf8');
+                    bios.push(JSON.parse(bioData));
+                }
+            }
+            logger.info(`Found ${bios.length} character bios`);
+        } catch (error) {
+            logger.warn(`No bios found in ${biosPath}: ${error.message}`);
+        }
+        
+        // If no bios found, extract from text
         if (bios.length === 0 && chapters.length > 0) {
             logger.info('No bios found, extracting character names from text...');
             const allText = chapters.map(ch => ch.text).join('\n');
