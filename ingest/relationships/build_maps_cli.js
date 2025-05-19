@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { buildAndSaveRelationshipMaps } = require('./build_maps');
-const logger = require('../utils/logger');
+const logger = require('../../src/utils/logger');
 
 async function main() {
     const projectId = process.argv[2];
