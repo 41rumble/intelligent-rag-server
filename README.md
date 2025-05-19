@@ -104,7 +104,67 @@ Review and merge the bio fragments into compiled character bios:
 1. Review the generated bio fragments in `/ingest/your_project_name/raw_bio_fragments/`
 2. Manually create compiled bios in `/ingest/your_project_name/compiled_bios/`
 
-### 4. Generate Embeddings and Store in MongoDB
+### 4. Build Relationship Maps
+
+Generate relationship maps between characters:
+```bash
+npm run relationships your_project_name
+```
+
+This will analyze character interactions and create:
+- Direct character-to-character relationships
+- Social networks and groups
+- Thematic connections
+- Event-based networks
+
+The analysis includes:
+- Interaction types (friendly, hostile, professional, etc.)
+- Emotional sentiment (-1 to 1)
+- Power dynamics
+- Relationship progression
+- Key moments and significant changes
+- Group dynamics and social structures
+- Thematic development
+- Event impact on relationships
+
+The relationship analysis uses LLM (configurable between OpenAI and Ollama) to:
+1. Analyze interactions in shared scenes
+2. Identify social groups and power structures
+3. Track relationship development over time
+4. Extract themes and motifs
+5. Analyze event impact on relationships
+
+Example relationship output:
+```json
+{
+  "source_character": "Character1",
+  "target_character": "Character2",
+  "relationship_type": "friendly",
+  "sentiment": 0.8,
+  "power_dynamic": "equal",
+  "key_moments": [
+    {
+      "chapter": "chapter_03",
+      "description": "First meeting",
+      "significance": "high"
+    }
+  ],
+  "progression": {
+    "initial_state": 0.2,
+    "current_state": 0.8,
+    "significant_changes": [
+      {
+        "chapter": "chapter_05",
+        "from": 0.2,
+        "to": 0.6,
+        "cause": "Worked together during crisis"
+      }
+    ]
+  }
+}
+```
+
+### 5. Generate Embeddings and Store in MongoDB
 
 Process the synopses and compiled bios to generate embeddings and store in MongoDB:
 ```
