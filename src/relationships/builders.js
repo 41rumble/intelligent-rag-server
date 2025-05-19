@@ -139,15 +139,18 @@ async function buildCharacterRelationships(bios, chapters) {
           sharedChapters
         );
         
-        // Add explicit relationship data if it exists
-        if (char1.relationships?.[char2.name]) {
-          relationship.explicit_description = char1.relationships[char2.name];
+        // Only process if we found a relationship
+        if (relationship) {
+          // Add explicit relationship data if it exists
+          if (char1.relationships?.[char2.name]) {
+            relationship.explicit_description = char1.relationships[char2.name];
+          }
+          if (char2.relationships?.[char1.name]) {
+            relationship.reverse_description = char2.relationships[char1.name];
+          }
+          
+          relationships.push(relationship);
         }
-        if (char2.relationships?.[char1.name]) {
-          relationship.reverse_description = char2.relationships[char1.name];
-        }
-        
-        relationships.push(relationship);
       }
     }
   }
