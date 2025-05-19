@@ -8,7 +8,7 @@ const projectId = process.argv[2] || 'the_great_fire';
 
 // Paths
 const projectPath = path.join(__dirname, projectId);
-const rawBiosPath = path.join(projectPath, 'raw_bios');
+const rawBiosPath = path.join(projectPath, 'raw_bio_fragments');
 const configPath = path.join(__dirname, 'config', 'name_mappings.json');
 
 /**
