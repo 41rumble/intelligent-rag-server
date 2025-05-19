@@ -27,25 +27,40 @@ async function buildCharacterRelationships(bios, chapters) {
   const relationships = [];
   logger.info('Building character relationships...');
 
-  // 1. Extract explicit relationships from bios
-  for (const bio of bios) {
-    if (bio.relationships) {
-      for (const [targetName, description] of Object.entries(bio.relationships)) {
-        relationships.push({
-          type: "character_relationship",
-          source_character: bio.name,
-          target_character: targetName,
-          relationship_type: inferRelationshipType(description),
-          strength: calculateRelationshipStrength(description),
-          timeline: await findInteractions(bio.name, targetName, chapters)
-        });
+  // Process each character pair
+  for (let i = 0; i < bios.length; i++) {
+    for (let j = i + 1; j < bios.length; j++) {
+      const char1 = bios[i];
+      const char2 = bios[j];
+      
+      // Skip if they never appear in the same chapters
+      const sharedChapters = chapters.filter(ch =>
+        ch.text.toLowerCase().includes(char1.name.toLowerCase()) &&
+        ch.text.toLowerCase().includes(char2.name.toLowerCase())
+      );
+      
+      if (sharedChapters.length > 0) {
+        logger.info(`Analyzing relationship between ${char1.name} and ${char2.name}`);
+        
+        // Build detailed relationship
+        const relationship = await buildDetailedRelationship(
+          char1.name,
+          char2.name,
+          sharedChapters
+        );
+        
+        // Add explicit relationship data if it exists
+        if (char1.relationships?.[char2.name]) {
+          relationship.explicit_description = char1.relationships[char2.name];
+        }
+        if (char2.relationships?.[char1.name]) {
+          relationship.reverse_description = char2.relationships[char1.name];
+        }
+        
+        relationships.push(relationship);
       }
     }
   }
-
-  // 2. Analyze co-occurrences in chapters
-  const coOccurrences = await analyzeCoOccurrences(bios, chapters);
-  relationships.push(...coOccurrences);
 
   logger.info(`Built ${relationships.length} character relationships`);
   return relationships;
