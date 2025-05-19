@@ -11,11 +11,45 @@ async function buildAndSaveRelationshipMaps(projectId) {
     logger.info(`Building relationship maps for project ${projectId}`);
     
     try {
-        const collection = await getProjectCollection(projectId);
+        // Get source data from files
+        const projectDir = path.join(process.cwd(), 'ingest', projectId);
+        logger.info(`Reading data from ${projectDir}`);
         
-        // Get source data
-        const bios = await collection.find({ type: "bio" }).toArray();
-        const chapters = await collection.find({ type: "chapter_text" }).toArray();
+        // Read bios
+        const biosPath = path.join(projectDir, 'bios');
+        const bios = [];
+        try {
+            const bioFiles = await fs.readdir(biosPath);
+            for (const file of bioFiles) {
+                if (file.endsWith('.json')) {
+                    const bioData = await fs.readFile(path.join(biosPath, file), 'utf8');
+                    bios.push(JSON.parse(bioData));
+                }
+            }
+            logger.info(`Found ${bios.length} character bios`);
+        } catch (error) {
+            logger.warn(`No bios found in ${biosPath}: ${error.message}`);
+        }
+        
+        // Read chapters
+        const chaptersPath = path.join(projectDir, 'chapters');
+        const chapters = [];
+        try {
+            const chapterFiles = await fs.readdir(chaptersPath);
+            for (const file of chapterFiles) {
+                if (file.endsWith('.json')) {
+                    const chapterData = await fs.readFile(path.join(chaptersPath, file), 'utf8');
+                    chapters.push(JSON.parse(chapterData));
+                }
+            }
+            logger.info(`Found ${chapters.length} chapters`);
+        } catch (error) {
+            logger.warn(`No chapters found in ${chaptersPath}: ${error.message}`);
+        }
+        
+        if (bios.length === 0 || chapters.length === 0) {
+            throw new Error('No bios or chapters found');
+        }
         
         // Build relationships
         const relationships = await buildCharacterRelationships(bios, chapters);
