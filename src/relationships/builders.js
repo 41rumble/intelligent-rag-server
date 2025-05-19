@@ -34,7 +34,12 @@ async function buildDetailedRelationship(char1Name, char2Name, sharedChapters) {
     }
 
     // Analyze co-occurrences for context
-    const coOccurrences = analyzeCoOccurrences(char1Name, char2Name, sharedChapters);
+    const coOccurrences = await analyzeCoOccurrences(char1Name, char2Name, sharedChapters);
+    
+    if (!coOccurrences) {
+      logger.info(`No co-occurrences found between ${char1Name} and ${char2Name}`);
+      return null;
+    }
 
     // Calculate relationship strength
     const strength = calculateRelationshipStrength(interactions, coOccurrences);
