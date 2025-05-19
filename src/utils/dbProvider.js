@@ -1,6 +1,6 @@
 const { MongoClient } = require('mongodb');
-const { OpenAIEmbeddings } = require('langchain/embeddings/openai');
 const logger = require('./logger');
+const { generateEmbedding } = require('./llmProvider');
 require('dotenv').config();
 
 let client = null;
@@ -34,14 +34,13 @@ function getEmbeddingsModel() {
 }
 
 /**
- * Generate embeddings for text
+ * Generate embeddings for text using Ollama
  * @param {string} text - Text to embed
  * @returns {Promise<number[]>} Embeddings vector
  */
 async function generateEmbeddings(text) {
   try {
-    const embeddings = getEmbeddingsModel();
-    const result = await embeddings.embedQuery(text);
+    const result = await generateEmbedding(text);
     return result;
   } catch (error) {
     logger.error('Error generating embeddings:', error);

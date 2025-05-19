@@ -20,7 +20,7 @@ const chapterDataPath = path.join(projectPath, 'chapter_data');
  * @param {number} overlap - Number of words to overlap between chunks
  * @returns {Array<string>} Array of text chunks
  */
-function chunkText(text, chunkSize = 500, overlap = 50) {
+function chunkText(text, chunkSize = 2000, overlap = 150) {
   // Split into words while preserving some punctuation
   const words = text.split(/\s+/);
   const chunks = [];
