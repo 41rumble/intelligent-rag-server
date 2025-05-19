@@ -1,63 +1,74 @@
 /**
- * Infer relationship type from description
- * @param {string} description - Relationship description
- * @returns {string} Relationship type
+ * Infer relationship type from interactions
+ * @param {Array} interactions - List of interactions between characters
+ * @returns {Object} Relationship type analysis
  */
-function inferRelationshipType(description) {
-  const familyTerms = ['father', 'mother', 'son', 'daughter', 'brother', 'sister', 'uncle', 'aunt', 'cousin'];
-  const friendTerms = ['friend', 'ally', 'companion', 'confidant'];
-  const antagonistTerms = ['enemy', 'rival', 'opponent', 'adversary'];
-  const professionalTerms = ['mentor', 'student', 'teacher', 'colleague', 'servant', 'master'];
-
-  description = description.toLowerCase();
-
-  if (familyTerms.some(term => description.includes(term))) {
-    return 'family';
+function inferRelationshipType(interactions) {
+  // Count interaction types
+  const typeCounts = {};
+  let totalWeight = 0;
+  
+  for (const interaction of interactions) {
+    const weight = interaction.weight || 1;
+    typeCounts[interaction.type] = (typeCounts[interaction.type] || 0) + weight;
+    totalWeight += weight;
   }
-  if (friendTerms.some(term => description.includes(term))) {
-    return 'friend';
-  }
-  if (antagonistTerms.some(term => description.includes(term))) {
-    return 'antagonist';
-  }
-  if (professionalTerms.some(term => description.includes(term))) {
-    return 'professional';
-  }
-
-  return 'other';
+  
+  // Get primary and secondary types
+  const sortedTypes = Object.entries(typeCounts)
+    .sort(([,a], [,b]) => b - a)
+    .map(([type, count]) => ({
+      type,
+      strength: count / totalWeight
+    }));
+  
+  return {
+    primary: sortedTypes[0]?.type || 'unknown',
+    secondary: sortedTypes[1]?.type,
+    type_distribution: Object.fromEntries(
+      sortedTypes.map(({type, strength}) => [type, strength])
+    )
+  };
 }
 
 /**
- * Calculate relationship strength from description and interactions
- * @param {string} description - Relationship description
- * @returns {number} Strength score (1-10)
+ * Calculate relationship strength from interactions and co-occurrences
+ * @param {Array} interactions - List of interactions between characters
+ * @param {Object} coOccurrences - Co-occurrence data
+ * @returns {Object} Strength analysis
  */
-function calculateRelationshipStrength(description) {
-  const strongIndicators = [
-    'close', 'devoted', 'loyal', 'trusted', 'beloved',
-    'intimate', 'dedicated', 'faithful', 'inseparable'
-  ];
+function calculateRelationshipStrength(interactions, coOccurrences) {
+  let totalScore = 0;
+  let totalWeight = 0;
   
-  const weakIndicators = [
-    'distant', 'estranged', 'former', 'occasional',
-    'casual', 'passing', 'brief', 'temporary'
-  ];
-
-  description = description.toLowerCase();
-  let score = 5; // Default neutral score
-
-  // Adjust for strong indicators
-  strongIndicators.forEach(indicator => {
-    if (description.includes(indicator)) score += 1;
-  });
-
-  // Adjust for weak indicators
-  weakIndicators.forEach(indicator => {
-    if (description.includes(indicator)) score -= 1;
-  });
-
-  // Ensure score stays within 1-10 range
-  return Math.max(1, Math.min(10, score));
+  // Score from direct interactions
+  for (const interaction of interactions) {
+    const weight = interaction.weight || 1;
+    const emotionMod = interaction.emotion?.weight || 1;
+    const intensityMod = interaction.intensity?.weight || 1;
+    const significanceMod = interaction.significance?.weight || 1;
+    
+    // Combine modifiers
+    const finalWeight = weight * emotionMod * intensityMod * significanceMod;
+    
+    totalScore += finalWeight;
+    totalWeight += 1;
+  }
+  
+  // Add co-occurrence influence
+  if (coOccurrences) {
+    totalScore += coOccurrences.proximity_score * 0.5; // Weight co-occurrences less than direct interactions
+    totalWeight += 0.5;
+  }
+  
+  const averageScore = totalWeight > 0 ? totalScore / totalWeight : 0;
+  
+  return {
+    score: averageScore,
+    confidence: calculateConfidence(interactions.length, coOccurrences),
+    interaction_count: interactions.length,
+    co_occurrence_score: coOccurrences?.proximity_score || 0
+  };
 }
 
 /**
