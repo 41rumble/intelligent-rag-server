@@ -80,11 +80,18 @@ async function analyzeCoOccurrences(char1Name, char2Name, chapters) {
     return null;
   }
 
-  // Analyze relationship using LLM with fallback
+  // Log the data we're working with
+  logger.info(`Analyzing relationship between ${char1Name} and ${char2Name}`);
+  logger.info(`Found ${relevantParagraphs.length} paragraphs with both characters`);
+  
+  // Log a sample of the paragraphs
+  if (relevantParagraphs.length > 0) {
+    logger.info('Sample paragraph:', relevantParagraphs[0].text.substring(0, 200));
+  }
+
+  // Analyze relationship using LLM
   try {
-    // First try LLM analysis
-    try {
-      const prompt = `You are a relationship analysis system. Your task is to analyze the relationship between two characters based on their interactions. You must respond with ONLY valid JSON, no other text.
+    const prompt = `You are a relationship analysis system. Your task is to analyze the relationship between two characters based on their interactions. You must respond with ONLY valid JSON, no other text.
 
 CHARACTERS:
 - Character 1: ${char1Name}

@@ -223,6 +223,9 @@ async function generateStructuredResponse(prompt, options = {}) {
         lastResponse = response;
         return JSON.parse(response);
       } else if (LLM_PROVIDER === 'ollama') {
+        // Log the original prompt
+        logger.info('Original prompt:', prompt);
+        
         // For Ollama, we need to explicitly request JSON in the prompt
         const jsonPrompt = `You are a JSON-only assistant. You must respond with ONLY valid JSON, no other text.
 
@@ -246,6 +249,9 @@ Here's the JSON:
 \`\`\`
 
 RESPOND NOW:`;
+
+        // Log the full prompt being sent
+        logger.info('Full prompt being sent to Ollama:', jsonPrompt);
         
         // Add system prompt if not provided
         if (!options.systemPrompt) {
@@ -256,6 +262,9 @@ RESPOND NOW:`;
           ...options,
           temperature: options.temperature || 0.1 // Very low temperature for structured output
         });
+        
+        // Log the raw response
+        logger.info('Raw response from Ollama:', response);
         
         lastResponse = response;
         
@@ -268,18 +277,29 @@ RESPOND NOW:`;
           .replace(/[^\}\]]*$/, '')           // Remove any text after last } or ]
           .trim();
         
+        // Log the cleaned response
+        logger.info('Cleaned response:', cleanedResponse);
+        
         // Try to parse the cleaned response
         try {
-          return JSON.parse(cleanedResponse);
+          const parsed = JSON.parse(cleanedResponse);
+          logger.info('Successfully parsed JSON:', parsed);
+          return parsed;
         } catch (firstError) {
+          // Log the parsing error
+          logger.error('Failed to parse cleaned response:', firstError.message);
+          
           // If that fails, try to extract JSON
           const jsonStr = extractJsonString(cleanedResponse);
           if (jsonStr) {
             try {
-              return JSON.parse(jsonStr);
+              const extracted = JSON.parse(jsonStr);
+              logger.info('Successfully parsed extracted JSON:', extracted);
+              return extracted;
             } catch (secondError) {
               lastError = secondError;
               logger.error('Failed to parse extracted JSON:', jsonStr);
+              logger.error('Parse error:', secondError.message);
               throw new Error('Failed to parse extracted JSON');
             }
           }
