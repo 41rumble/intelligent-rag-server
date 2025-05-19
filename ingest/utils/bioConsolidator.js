@@ -184,5 +184,7 @@ function consolidateBios(bios, nameMappings) {
 
 module.exports = {
   loadNameMappings,
-  consolidateBios
+  consolidateBios,
+  findCharacterGroup,
+  normalizeCharacterName
 };
