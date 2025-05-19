@@ -224,36 +224,67 @@ async function generateStructuredResponse(prompt, options = {}) {
         return JSON.parse(response);
       } else if (LLM_PROVIDER === 'ollama') {
         // For Ollama, we need to explicitly request JSON in the prompt
-        const jsonPrompt = `
-        ${prompt}
+        const jsonPrompt = `You are a JSON-only assistant. You must respond with ONLY valid JSON, no other text.
 
-        CRITICAL: Your response must be ONLY valid JSON. No other text, no markdown.
-        The response should start with { or [ and end with } or ].
-        Do not include any explanations or text outside the JSON structure.
-        `;
+TASK:
+${prompt}
+
+CRITICAL RULES:
+1. Response must be ONLY valid JSON
+2. No text before or after the JSON
+3. No backticks, markdown, or code blocks
+4. No explanations or comments
+5. Start with { and end with }
+
+Example of GOOD response:
+{"key": "value"}
+
+Example of BAD response:
+Here's the JSON:
+\`\`\`json
+{"key": "value"}
+\`\`\`
+
+RESPOND NOW:`;
         
         // Add system prompt if not provided
         if (!options.systemPrompt) {
-          options.systemPrompt = "You are a helpful assistant that always responds with valid JSON. Never include any explanatory text outside the JSON structure.";
+          options.systemPrompt = "You are a JSON-only assistant. Never include any text outside the JSON structure.";
         }
         
         const response = await generateCompletion(jsonPrompt, {
           ...options,
-          temperature: options.temperature || 0.3 // Lower temperature for structured output
+          temperature: options.temperature || 0.1 // Very low temperature for structured output
         });
         
         lastResponse = response;
         
-        // Try to parse the full response first
+        // Clean the response
+        const cleanedResponse = response
+          .trim()
+          .replace(/^[\s\n]*```[^\n]*\n/, '') // Remove opening code fence
+          .replace(/\n```[\s\n]*$/, '')       // Remove closing code fence
+          .replace(/^[^{[\n]*/, '')           // Remove any text before first { or [
+          .replace(/[^\}\]]*$/, '')           // Remove any text after last } or ]
+          .trim();
+        
+        // Try to parse the cleaned response
         try {
-          return JSON.parse(response);
-        } catch (error) {
-          // If full parse fails, try to extract JSON
-          const jsonStr = extractJsonString(response);
+          return JSON.parse(cleanedResponse);
+        } catch (firstError) {
+          // If that fails, try to extract JSON
+          const jsonStr = extractJsonString(cleanedResponse);
           if (jsonStr) {
-            return JSON.parse(jsonStr);
+            try {
+              return JSON.parse(jsonStr);
+            } catch (secondError) {
+              lastError = secondError;
+              logger.error('Failed to parse extracted JSON:', jsonStr);
+              throw new Error('Failed to parse extracted JSON');
+            }
           }
-          lastError = error;
+          lastError = firstError;
+          logger.error('No valid JSON found in response:', cleanedResponse);
           throw new Error('No valid JSON found in response');
         }
       }

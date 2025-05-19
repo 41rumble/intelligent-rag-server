@@ -82,25 +82,36 @@ async function analyzeCoOccurrences(char1Name, char2Name, chapters) {
 
   // Analyze relationship using LLM
   try {
-    const prompt = `
-Analyze the relationship between ${char1Name} and ${char2Name} in these interactions:
+    const prompt = `You are a relationship analysis system. Your task is to analyze the relationship between two characters based on their interactions. You must respond with ONLY valid JSON, no other text.
 
+CHARACTERS:
+- Character 1: ${char1Name}
+- Character 2: ${char2Name}
+
+INTERACTIONS:
 ${relevantParagraphs.map(p => `[Chapter ${p.chapter}]: ${p.text}`).join('\n\n')}
 
-Return ONLY valid JSON with this structure:
+RESPONSE FORMAT:
 {
   "relationship": {
     "type": "friendly" | "hostile" | "professional" | "neutral" | "complex",
-    "sentiment": number (-1 to 1),
+    "sentiment": <number between -1 and 1>,
     "power_dynamic": "equal" | "${char1Name}_dominant" | "${char2Name}_dominant",
     "key_patterns": {
-      "interaction_types": string[],
-      "recurring_themes": string[],
-      "significant_events": string[]
+      "interaction_types": ["<type1>", "<type2>", ...],
+      "recurring_themes": ["<theme1>", "<theme2>", ...],
+      "significant_events": ["<event1>", "<event2>", ...]
     },
-    "confidence": number (0 to 1)
+    "confidence": <number between 0 and 1>
   }
-}`;
+}
+
+RULES:
+1. Respond with ONLY the JSON object, no other text
+2. All fields are required
+3. Arrays must have at least one item
+4. Numbers must be within specified ranges
+5. Do not use backticks, markdown, or code blocks`;
 
     const analysis = await generateStructuredResponse(prompt);
     logger.info(`Generated relationship analysis between ${char1Name} and ${char2Name}`);
