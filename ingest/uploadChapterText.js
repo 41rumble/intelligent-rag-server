@@ -1,10 +1,12 @@
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('../src/utils/logger');
+const { uploadDocuments, closeDB } = require('../src/utils/dbProvider');
 require('dotenv').config();
 
 // Project ID from command line or default
 const projectId = process.argv[2] || 'the_great_fire';
+const shouldUpload = process.argv.includes('--upload');
 
 // Paths
 const projectPath = path.join(__dirname, projectId);
@@ -129,6 +131,17 @@ async function processChapterText(chapterId) {
     );
     
     logger.info(`Saved ${chunks.length} chunks for ${chapterId}`);
+
+    // Upload to database if requested
+    if (shouldUpload) {
+      try {
+        await uploadDocuments(chunkDocs, 'chapter_chunks');
+        logger.info(`Uploaded ${chunks.length} chunks to database for ${chapterId}`);
+      } catch (error) {
+        logger.error(`Error uploading chunks for ${chapterId}:`, error);
+      }
+    }
+
     return chunkDocs;
   } catch (error) {
     logger.error(`Error processing chapter ${chapterId}:`, error);
@@ -157,6 +170,10 @@ async function main() {
     logger.info('All chapters processed successfully');
   } catch (error) {
     logger.error('Error in main process:', error);
+  } finally {
+    if (shouldUpload) {
+      await closeDB();
+    }
   }
 }
 
