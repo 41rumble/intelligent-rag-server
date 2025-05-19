@@ -146,6 +146,30 @@ function calculateInfluence(character, group) {
 }
 
 /**
+ * Calculate confidence in relationship assessment
+ * @param {number} interactionCount - Number of direct interactions
+ * @param {Object} coOccurrences - Co-occurrence data
+ * @returns {number} Confidence score between 0 and 1
+ */
+function calculateConfidence(interactionCount, coOccurrences) {
+  let confidence = 0;
+  
+  // More interactions = higher confidence
+  confidence += Math.min(0.5, interactionCount * 0.1); // Up to 0.5 from interaction count
+  
+  // Co-occurrence data adds confidence
+  if (coOccurrences) {
+    confidence += Math.min(0.3, coOccurrences.total_scenes * 0.05); // Up to 0.3 from co-occurrences
+    
+    // Variety of contexts increases confidence
+    const contextTypes = Object.keys(coOccurrences.context_patterns).length;
+    confidence += Math.min(0.2, contextTypes * 0.04); // Up to 0.2 from context variety
+  }
+  
+  return Math.min(1, confidence);
+}
+
+/**
  * Calculate interaction score for influence calculation
  * @param {Object} character - Character data
  * @param {Object} group - Social group data
