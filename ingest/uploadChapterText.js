@@ -1,7 +1,10 @@
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('../src/utils/logger');
-const { uploadDocuments, closeDB } = require('../src/utils/dbProvider');
+const mongoClient = require('../src/utils/mongoClient');
+const vectorStore = require('../src/utils/vectorStore');
+const { generateEmbedding } = require('../src/utils/llmProvider');
+const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 
 // Project ID from command line or default
@@ -135,7 +138,41 @@ async function processChapterText(chapterId) {
     // Upload to database if requested
     if (shouldUpload) {
       try {
-        await uploadDocuments(chunkDocs, 'chapter_chunks');
+        const collection = await mongoClient.getProjectCollection(projectId);
+
+        // Process each chunk
+        for (const doc of chunkDocs) {
+          // Generate embedding for chunk
+          const embedding = await generateEmbedding(doc.text);
+          const vectorId = uuidv4();
+
+          // Store embedding in FAISS
+          await vectorStore.addVectors(projectId, [embedding], [vectorId]);
+
+          // Prepare document for MongoDB
+          const document = {
+            _id: `chunk_${doc.chapter_id}_${doc.chunk_index}`,
+            type: 'chapter_text',
+            project: projectId,
+            text: doc.text,
+            chapter_id: doc.chapter_id,
+            chunk_index: doc.chunk_index,
+            total_chunks: doc.total_chunks,
+            section_type: doc.section_type,
+            section_order: doc.section_order,
+            vector_id: vectorId,
+            priority: 1,
+            source_files: [doc.chapter_id]
+          };
+
+          // Insert or update document
+          await collection.updateOne(
+            { _id: document._id },
+            { $set: document },
+            { upsert: true }
+          );
+        }
+
         logger.info(`Uploaded ${chunks.length} chunks to database for ${chapterId}`);
       } catch (error) {
         logger.error(`Error uploading chunks for ${chapterId}:`, error);
@@ -154,6 +191,11 @@ async function processChapterText(chapterId) {
  */
 async function main() {
   try {
+    // Initialize MongoDB collection with schema validation
+    if (shouldUpload) {
+      await mongoClient.initializeCollection(projectId);
+    }
+
     // Get all chapter files
     const chapterFiles = await fs.readdir(chaptersPath);
     const chapterIds = chapterFiles
@@ -172,7 +214,7 @@ async function main() {
     logger.error('Error in main process:', error);
   } finally {
     if (shouldUpload) {
-      await closeDB();
+      await mongoClient.close();
     }
   }
 }
