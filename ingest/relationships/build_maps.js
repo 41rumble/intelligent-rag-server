@@ -37,9 +37,14 @@ async function buildAndSaveRelationshipMaps(projectId) {
         try {
             const chapterFiles = await fs.readdir(chaptersPath);
             for (const file of chapterFiles) {
-                if (file.endsWith('.json')) {
-                    const chapterData = await fs.readFile(path.join(chaptersPath, file), 'utf8');
-                    chapters.push(JSON.parse(chapterData));
+                if (file.endsWith('.txt')) {
+                    const chapterText = await fs.readFile(path.join(chaptersPath, file), 'utf8');
+                    const chapterId = file.replace('.txt', '');
+                    chapters.push({
+                        type: 'chapter_text',
+                        chapter_id: chapterId,
+                        text: chapterText
+                    });
                 }
             }
             logger.info(`Found ${chapters.length} chapters`);
@@ -47,8 +52,27 @@ async function buildAndSaveRelationshipMaps(projectId) {
             logger.warn(`No chapters found in ${chaptersPath}: ${error.message}`);
         }
         
-        if (bios.length === 0 || chapters.length === 0) {
-            throw new Error('No bios or chapters found');
+        // Create bios from character names in text
+        if (bios.length === 0 && chapters.length > 0) {
+            logger.info('No bios found, extracting character names from text...');
+            const allText = chapters.map(ch => ch.text).join('\n');
+            
+            // Simple name extraction (this is a basic version)
+            const namePattern = /[A-Z][a-z]+ (?:[A-Z][a-z]+ )?[A-Z][a-z]+/g;
+            const names = [...new Set(allText.match(namePattern) || [])];
+            
+            bios = names.map(name => ({
+                type: 'bio',
+                name: name,
+                text: `Character named ${name}`,
+                source_files: chapters.map(ch => ch.chapter_id)
+            }));
+            
+            logger.info(`Extracted ${bios.length} potential character names`);
+        }
+        
+        if (chapters.length === 0) {
+            throw new Error('No chapters found');
         }
         
         // Build relationships
