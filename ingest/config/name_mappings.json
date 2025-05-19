@@ -1,0 +1,64 @@
+{
+  "character_groups": [
+    {
+      "primary_name": "John Smith Sr.",
+      "variations": [
+        "John Smith",
+        "Smith",
+        "John",
+        "Mr. Smith"
+      ],
+      "disambiguation": {
+        "generation": "Sr.",
+        "birth_year": "1650",
+        "context_clues": [
+          "father",
+          "elder Smith",
+          "the elder"
+        ]
+      }
+    },
+    {
+      "primary_name": "John William Smith Jr.",
+      "variations": [
+        "John W. Smith",
+        "John William Smith",
+        "young Smith",
+        "the younger Smith"
+      ],
+      "disambiguation": {
+        "generation": "Jr.",
+        "birth_year": "1675",
+        "context_clues": [
+          "son",
+          "younger Smith",
+          "the younger"
+        ]
+      }
+    }
+  ],
+  "title_patterns": [
+    "Mr.",
+    "Mrs.",
+    "Sir",
+    "Lady",
+    "Lord",
+    "Duke",
+    "Duchess"
+  ],
+  "generation_patterns": [
+    "Sr.",
+    "Jr.",
+    "III",
+    "the elder",
+    "the younger"
+  ],
+  "relationship_keywords": [
+    "father",
+    "son",
+    "brother",
+    "sister",
+    "mother",
+    "daughter"
+  ]
+}
