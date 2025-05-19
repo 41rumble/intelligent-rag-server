@@ -111,7 +111,7 @@ async function initializeCollection(projectId) {
           properties: {
             type: {
               bsonType: "string",
-              enum: ["chapter_synopsis", "bio", "acknowledgement", "preface"]
+              enum: ["chapter_synopsis", "bio", "acknowledgement", "preface", "chapter_text"]
             },
             project: {
               bsonType: "string"
@@ -213,6 +213,18 @@ async function initializeCollection(projectId) {
             },
             story_arc_position: {
               bsonType: "string"
+            },
+            chapter_id: {
+              bsonType: "string",
+              description: "Identifier of the chapter this chunk belongs to"
+            },
+            chunk_index: {
+              bsonType: "int",
+              description: "Index of this chunk within the chapter"
+            },
+            total_chunks: {
+              bsonType: "int",
+              description: "Total number of chunks in the chapter"
             }
           }
         }
