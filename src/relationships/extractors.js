@@ -41,55 +41,61 @@ async function findInteractions(char1, char2, chapters) {
  * @param {Array} chapters - Chapter data
  * @returns {Array} Co-occurrence relationships
  */
-async function analyzeCoOccurrences(bios, chapters) {
-  const coOccurrences = new Map(); // Map of character pair -> occurrences
+async function analyzeCoOccurrences(char1Name, char2Name, chapters) {
+  const coOccurrences = {
+    total_scenes: 0,
+    context_patterns: {},
+    chapters: new Set()
+  };
+
+  if (!chapters || !Array.isArray(chapters)) {
+    logger.warn(`Invalid chapters data for ${char1Name} and ${char2Name}`);
+    return coOccurrences;
+  }
+
+  const char1Lower = char1Name.toLowerCase();
+  const char2Lower = char2Name.toLowerCase();
 
   for (const chapter of chapters) {
+    if (!chapter || !chapter.text) {
+      logger.warn(`Invalid chapter data in analyzeCoOccurrences`);
+      continue;
+    }
+
     const text = chapter.text.toLowerCase();
     
-    // Check each character pair
-    for (let i = 0; i < bios.length; i++) {
-      for (let j = i + 1; j < bios.length; j++) {
-        const char1 = bios[i].name.toLowerCase();
-        const char2 = bios[j].name.toLowerCase();
-        
-        // Count paragraphs where both appear
-        const paragraphs = text.split('\n\n');
-        const coOccurrencesInChapter = paragraphs.filter(p => 
-          p.includes(char1) && p.includes(char2)
-        ).length;
-        
-        if (coOccurrencesInChapter > 0) {
-          const key = `${bios[i].name}|${bios[j].name}`;
-          const current = coOccurrences.get(key) || {
-            count: 0,
-            chapters: new Set()
-          };
+    // Count paragraphs where both appear
+    const paragraphs = text.split('\n\n');
+    const coOccurrencesInChapter = paragraphs.filter(p => 
+      p.includes(char1Lower) && p.includes(char2Lower)
+    ).length;
+    
+    if (coOccurrencesInChapter > 0) {
+      coOccurrences.total_scenes += coOccurrencesInChapter;
+      coOccurrences.chapters.add(chapter.chapter_id);
+      
+      // Analyze context patterns
+      paragraphs.forEach(p => {
+        if (p.includes(char1Lower) && p.includes(char2Lower)) {
+          // Look for contextual patterns
+          const patterns = [
+            'together', 'met', 'spoke', 'talked',
+            'argued', 'fought', 'helped', 'supported',
+            'visited', 'accompanied', 'joined'
+          ];
           
-          current.count += coOccurrencesInChapter;
-          current.chapters.add(chapter.chapter_id);
-          coOccurrences.set(key, current);
+          patterns.forEach(pattern => {
+            if (p.includes(pattern)) {
+              coOccurrences.context_patterns[pattern] = 
+                (coOccurrences.context_patterns[pattern] || 0) + 1;
+            }
+          });
         }
-      }
+      });
     }
   }
 
-  // Convert co-occurrences to relationships
-  return Array.from(coOccurrences.entries()).map(([key, data]) => {
-    const [char1, char2] = key.split('|');
-    return {
-      type: "character_relationship",
-      source_character: char1,
-      target_character: char2,
-      relationship_type: "co-occurrence",
-      strength: calculateCoOccurrenceStrength(data.count),
-      timeline: Array.from(data.chapters).map(chapter => ({
-        chapter,
-        interaction: "Appeared together",
-        significance: "medium"
-      }))
-    };
-  });
+  return coOccurrences;
 }
 
 /**
