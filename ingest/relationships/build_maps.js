@@ -1,3 +1,5 @@
+const fs = require('fs').promises;
+const path = require('path');
 const { buildCharacterRelationships } = require('../../src/relationships/builders');
 const { getProjectCollection } = require('../../src/utils/mongoClient');
 const logger = require('../../src/utils/logger');
@@ -86,7 +88,38 @@ async function buildAndSaveRelationshipMaps(projectId) {
             { upsert: true }
         );
 
-        logger.info(`Successfully saved relationship maps for project ${projectId}`);
+        // Save to file system
+        const outputDir = path.join(process.cwd(), 'ingest', projectId, 'relationship_maps');
+        await fs.mkdir(outputDir, { recursive: true });
+        
+        // Save different aspects to separate files for easier analysis
+        await fs.writeFile(
+            path.join(outputDir, 'direct_relationships.json'),
+            JSON.stringify(relationshipMaps.direct_relationships, null, 2)
+        );
+        
+        await fs.writeFile(
+            path.join(outputDir, 'communities.json'),
+            JSON.stringify(relationshipMaps.communities, null, 2)
+        );
+        
+        await fs.writeFile(
+            path.join(outputDir, 'timeline.json'),
+            JSON.stringify(relationshipMaps.timeline, null, 2)
+        );
+        
+        await fs.writeFile(
+            path.join(outputDir, 'graph.json'),
+            JSON.stringify(relationshipMaps.graph, null, 2)
+        );
+
+        // Save complete maps
+        await fs.writeFile(
+            path.join(outputDir, 'complete_maps.json'),
+            JSON.stringify(relationshipMaps, null, 2)
+        );
+
+        logger.info(`Successfully saved relationship maps for project ${projectId} to ${outputDir}`);
         return relationshipMaps;
 
     } catch (error) {

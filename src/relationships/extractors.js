@@ -297,8 +297,6 @@ function identifyEventThemes(event) {
 
 // Helper functions
 
-const { generateStructuredResponse } = require('../utils/llmProvider');
-
 async function extractInteractionContext(paragraph, char1, char2) {
   try {
     const prompt = `
