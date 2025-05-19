@@ -158,11 +158,11 @@ function calculateConfidence(interactionCount, coOccurrences) {
   confidence += Math.min(0.5, interactionCount * 0.1); // Up to 0.5 from interaction count
   
   // Co-occurrence data adds confidence
-  if (coOccurrences) {
+  if (coOccurrences?.total_scenes) {
     confidence += Math.min(0.3, coOccurrences.total_scenes * 0.05); // Up to 0.3 from co-occurrences
     
     // Variety of contexts increases confidence
-    const contextTypes = Object.keys(coOccurrences.context_patterns).length;
+    const contextTypes = Object.keys(coOccurrences.context_patterns || {}).length;
     confidence += Math.min(0.2, contextTypes * 0.04); // Up to 0.2 from context variety
   }
   

@@ -24,36 +24,41 @@ const {
 async function buildDetailedRelationship(char1Name, char2Name, sharedChapters) {
   logger.info(`Building detailed relationship between ${char1Name} and ${char2Name}`);
 
-  // Find all interactions between these characters
-  const interactions = await findInteractions(char1Name, char2Name, sharedChapters);
-  
-  if (interactions.length === 0) {
-    logger.info(`No interactions found between ${char1Name} and ${char2Name}`);
-    return null;
+  try {
+    // Find all interactions between these characters
+    const interactions = await findInteractions(char1Name, char2Name, sharedChapters);
+    
+    if (!interactions || interactions.length === 0) {
+      logger.info(`No interactions found between ${char1Name} and ${char2Name}`);
+      return null;
+    }
+
+    // Analyze co-occurrences for context
+    const coOccurrences = analyzeCoOccurrences(char1Name, char2Name, sharedChapters);
+
+    // Calculate relationship strength
+    const strength = calculateRelationshipStrength(interactions, coOccurrences);
+
+    // Determine relationship type
+    const type = inferRelationshipType(interactions);
+
+    // Track relationship progression
+    const progression = trackProgression(interactions);
+
+    return {
+      source_character: char1Name,
+      target_character: char2Name,
+      strength,
+      type,
+      key_moments: extractKeyMoments(interactions),
+      progression,
+      interactions_count: interactions.length,
+      co_occurrences: coOccurrences
+    };
+  } catch (error) {
+    logger.error(`Error building relationship between ${char1Name} and ${char2Name}: ${error.message}`);
+    throw error;
   }
-
-  // Analyze co-occurrences for context
-  const coOccurrences = analyzeCoOccurrences(char1Name, char2Name, sharedChapters);
-
-  // Calculate relationship strength
-  const strength = calculateRelationshipStrength(interactions, coOccurrences);
-
-  // Determine relationship type
-  const type = inferRelationshipType(interactions);
-
-  // Track relationship progression
-  const progression = trackProgression(interactions);
-
-  return {
-    source_character: char1Name,
-    target_character: char2Name,
-    strength,
-    type,
-    key_moments: extractKeyMoments(interactions),
-    progression,
-    interactions_count: interactions.length,
-    co_occurrences: coOccurrences
-  };
 }
 
 /**
