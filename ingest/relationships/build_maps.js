@@ -39,8 +39,8 @@ async function buildAndSaveRelationshipMaps(projectId) {
         // Now get or generate bios
         let bios = [];
         
-        // Try reading existing bios first
-        const biosPath = path.join(projectDir, 'bios');
+        // Try reading existing bios first from compiled_bios directory
+        const biosPath = path.join(projectDir, 'compiled_bios');
         try {
             const bioFiles = await fs.readdir(biosPath);
             for (const file of bioFiles) {
@@ -49,7 +49,7 @@ async function buildAndSaveRelationshipMaps(projectId) {
                     bios.push(JSON.parse(bioData));
                 }
             }
-            logger.info(`Found ${bios.length} character bios`);
+            logger.info(`Found ${bios.length} character bios in compiled_bios directory`);
         } catch (error) {
             logger.warn(`No bios found in ${biosPath}: ${error.message}`);
         }
