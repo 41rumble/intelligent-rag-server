@@ -19,6 +19,91 @@ const {
 } = require('./extractors');
 
 /**
+ * Build detailed relationship between two characters
+ */
+async function buildDetailedRelationship(char1Name, char2Name, sharedChapters) {
+  logger.info(`Building detailed relationship between ${char1Name} and ${char2Name}`);
+
+  // Find all interactions between these characters
+  const interactions = await findInteractions(char1Name, char2Name, sharedChapters);
+  
+  if (interactions.length === 0) {
+    logger.info(`No interactions found between ${char1Name} and ${char2Name}`);
+    return null;
+  }
+
+  // Analyze co-occurrences for context
+  const coOccurrences = analyzeCoOccurrences(char1Name, char2Name, sharedChapters);
+
+  // Calculate relationship strength
+  const strength = calculateRelationshipStrength(interactions, coOccurrences);
+
+  // Determine relationship type
+  const type = inferRelationshipType(interactions);
+
+  // Track relationship progression
+  const progression = trackProgression(interactions);
+
+  return {
+    source_character: char1Name,
+    target_character: char2Name,
+    strength,
+    type,
+    key_moments: extractKeyMoments(interactions),
+    progression,
+    interactions_count: interactions.length,
+    co_occurrences: coOccurrences
+  };
+}
+
+/**
+ * Track how relationship changes over time
+ */
+function trackProgression(interactions) {
+  // Sort interactions by chapter
+  const sortedInteractions = [...interactions]
+    .sort((a, b) => a.chapter.localeCompare(b.chapter));
+  
+  // Track significant changes
+  const significantChanges = [];
+  let lastSentiment = 0;
+  
+  for (const interaction of sortedInteractions) {
+    if (Math.abs(interaction.sentiment - lastSentiment) > 0.5) {
+      significantChanges.push({
+        chapter: interaction.chapter,
+        from: lastSentiment,
+        to: interaction.sentiment,
+        cause: interaction.description
+      });
+    }
+    lastSentiment = interaction.sentiment;
+  }
+  
+  return {
+    initial_state: sortedInteractions[0]?.sentiment || 0,
+    current_state: sortedInteractions[sortedInteractions.length - 1]?.sentiment || 0,
+    significant_changes: significantChanges
+  };
+}
+
+/**
+ * Extract key moments in the relationship
+ */
+function extractKeyMoments(interactions) {
+  return interactions
+    .filter(i => Math.abs(i.sentiment) > 0.7) // Only highly emotional interactions
+    .map(i => ({
+      chapter: i.chapter,
+      description: i.description,
+      sentiment: i.sentiment,
+      type: i.type
+    }))
+    .sort((a, b) => Math.abs(b.sentiment) - Math.abs(a.sentiment)) // Most significant first
+    .slice(0, 5); // Top 5 key moments
+}
+
+/**
  * Build direct character-to-character relationships
  * @param {Array} bios - Character bios
  * @param {Array} chapters - Chapter data
