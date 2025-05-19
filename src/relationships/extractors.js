@@ -1,3 +1,6 @@
+const logger = require('../utils/logger');
+const { generateStructuredResponse } = require('../utils/llmProvider');
+
 /**
  * Find interactions between two characters in chapters
  * @param {string} char1 - First character name
@@ -42,60 +45,77 @@ async function findInteractions(char1, char2, chapters) {
  * @returns {Array} Co-occurrence relationships
  */
 async function analyzeCoOccurrences(char1Name, char2Name, chapters) {
-  const coOccurrences = {
-    total_scenes: 0,
-    context_patterns: {},
-    chapters: new Set()
-  };
-
   if (!chapters || !Array.isArray(chapters)) {
     logger.warn(`Invalid chapters data for ${char1Name} and ${char2Name}`);
-    return coOccurrences;
+    return null;
   }
 
   const char1Lower = char1Name.toLowerCase();
   const char2Lower = char2Name.toLowerCase();
 
+  // Collect all relevant paragraphs
+  const relevantParagraphs = [];
   for (const chapter of chapters) {
     if (!chapter || !chapter.text) {
       logger.warn(`Invalid chapter data in analyzeCoOccurrences`);
       continue;
     }
 
-    const text = chapter.text.toLowerCase();
-    
-    // Count paragraphs where both appear
-    const paragraphs = text.split('\n\n');
-    const coOccurrencesInChapter = paragraphs.filter(p => 
-      p.includes(char1Lower) && p.includes(char2Lower)
-    ).length;
-    
-    if (coOccurrencesInChapter > 0) {
-      coOccurrences.total_scenes += coOccurrencesInChapter;
-      coOccurrences.chapters.add(chapter.chapter_id);
-      
-      // Analyze context patterns
-      paragraphs.forEach(p => {
-        if (p.includes(char1Lower) && p.includes(char2Lower)) {
-          // Look for contextual patterns
-          const patterns = [
-            'together', 'met', 'spoke', 'talked',
-            'argued', 'fought', 'helped', 'supported',
-            'visited', 'accompanied', 'joined'
-          ];
-          
-          patterns.forEach(pattern => {
-            if (p.includes(pattern)) {
-              coOccurrences.context_patterns[pattern] = 
-                (coOccurrences.context_patterns[pattern] || 0) + 1;
-            }
-          });
-        }
-      });
+    const paragraphs = chapter.text.split('\n\n');
+    const sharedParagraphs = paragraphs.filter(p => 
+      p.toLowerCase().includes(char1Lower) && 
+      p.toLowerCase().includes(char2Lower)
+    );
+
+    if (sharedParagraphs.length > 0) {
+      relevantParagraphs.push(...sharedParagraphs.map(p => ({
+        text: p,
+        chapter: chapter.chapter_id
+      })));
     }
   }
 
-  return coOccurrences;
+  if (relevantParagraphs.length === 0) {
+    logger.info(`No shared paragraphs found between ${char1Name} and ${char2Name}`);
+    return null;
+  }
+
+  // Analyze relationship using LLM
+  try {
+    const prompt = `
+Analyze the relationship between ${char1Name} and ${char2Name} in these interactions:
+
+${relevantParagraphs.map(p => `[Chapter ${p.chapter}]: ${p.text}`).join('\n\n')}
+
+Return ONLY valid JSON with this structure:
+{
+  "relationship": {
+    "type": "friendly" | "hostile" | "professional" | "neutral" | "complex",
+    "sentiment": number (-1 to 1),
+    "power_dynamic": "equal" | "${char1Name}_dominant" | "${char2Name}_dominant",
+    "key_patterns": {
+      "interaction_types": string[],
+      "recurring_themes": string[],
+      "significant_events": string[]
+    },
+    "confidence": number (0 to 1)
+  }
+}`;
+
+    const analysis = await generateStructuredResponse(prompt);
+    logger.info(`Generated relationship analysis between ${char1Name} and ${char2Name}`);
+
+    return {
+      total_scenes: relevantParagraphs.length,
+      chapters: new Set(relevantParagraphs.map(p => p.chapter)),
+      analysis: analysis.relationship
+    };
+  } catch (error) {
+    logger.error(`Failed to analyze relationship between ${char1Name} and ${char2Name}: ${error.message}`);
+    return null;
+  }
+
+
 }
 
 /**
