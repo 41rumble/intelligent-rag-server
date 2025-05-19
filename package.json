@@ -30,10 +30,10 @@
     "express": "^4.18.2",
     "faiss-node": "^0.5.1",
     "mongodb": "^6.3.0",
-    "openai": "^4.20.1",
-    "winston": "^3.11.0",
     "ollama": "^0.5.15",
-    "uuid": "^9.0.1"
+    "openai": "^4.20.1",
+    "uuid": "^9.0.1",
+    "winston": "^3.17.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",
