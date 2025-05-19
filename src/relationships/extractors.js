@@ -122,60 +122,14 @@ RULES:
 4. Numbers must be within specified ranges
 5. Do not use backticks, markdown, or code blocks`;
 
-      const analysis = await generateStructuredResponse(prompt);
-      logger.info(`Generated relationship analysis between ${char1Name} and ${char2Name}`);
+    const analysis = await generateStructuredResponse(prompt);
+    logger.info(`Generated relationship analysis between ${char1Name} and ${char2Name}`);
 
-      return {
-        total_scenes: relevantParagraphs.length,
-        chapters: new Set(relevantParagraphs.map(p => p.chapter)),
-        analysis: analysis.relationship
-      };
-    } catch (llmError) {
-      // If LLM fails, use heuristic analysis
-      logger.warn(`LLM analysis failed for ${char1Name} and ${char2Name}, using heuristic analysis`);
-      
-      // Simple sentiment analysis based on keywords
-      const text = relevantParagraphs.map(p => p.text.toLowerCase()).join(' ');
-      const positiveWords = ['friend', 'support', 'help', 'agree', 'thank', 'praise', 'respect'];
-      const negativeWords = ['disagree', 'oppose', 'argue', 'conflict', 'criticize', 'reject', 'angry'];
-      
-      let sentiment = 0;
-      positiveWords.forEach(word => {
-        if (text.includes(word)) sentiment += 0.2;
-      });
-      negativeWords.forEach(word => {
-        if (text.includes(word)) sentiment -= 0.2;
-      });
-      sentiment = Math.max(-1, Math.min(1, sentiment)); // Clamp between -1 and 1
-      
-      // Determine relationship type based on sentiment
-      let type = 'neutral';
-      if (sentiment > 0.3) type = 'friendly';
-      else if (sentiment < -0.3) type = 'hostile';
-      else if (text.includes('work') || text.includes('office') || text.includes('meeting')) type = 'professional';
-      
-      // Extract significant events
-      const significantEvents = relevantParagraphs.map(p => {
-        const firstSentence = p.text.split('.')[0];
-        return firstSentence.length > 100 ? firstSentence.substring(0, 100) + '...' : firstSentence;
-      });
-
-      return {
-        total_scenes: relevantParagraphs.length,
-        chapters: new Set(relevantParagraphs.map(p => p.chapter)),
-        analysis: {
-          type,
-          sentiment,
-          power_dynamic: 'equal', // Default to equal when unsure
-          key_patterns: {
-            interaction_types: ['documented interaction'],
-            recurring_themes: ['mentioned together'],
-            significant_events: significantEvents
-          },
-          confidence: 0.3 // Low confidence for heuristic analysis
-        }
-      };
-    }
+    return {
+      total_scenes: relevantParagraphs.length,
+      chapters: new Set(relevantParagraphs.map(p => p.chapter)),
+      analysis: analysis.relationship
+    };
   } catch (error) {
     logger.error(`Failed to analyze relationship between ${char1Name} and ${char2Name}: ${error.message}`);
     return null;
