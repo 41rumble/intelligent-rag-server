@@ -62,35 +62,75 @@ async function classifyQuery(query, projectId) {
     Analyze the query carefully and provide appropriate values for all fields.
     `;
 
-    const classification = await generateStructuredResponse(prompt, {
+    const response = await generateStructuredResponse(prompt, {
       temperature: 0.3,
-      maxTokens: 500
+      maxTokens: 1000,
+      stop: ['}'] // Stop after the JSON object closes
     });
     
-    logger.info('Query classified:', { 
-      query, 
-      query_type: classification.query_type,
-      complexity: classification.query_complexity
+    // Clean and parse the response
+    const cleanedResponse = response.replace(/```json\n?|\n?```/g, '').trim() + '}';
+    const classification = JSON.parse(cleanedResponse);
+    
+    logger.info('Query classified successfully', {
+      query,
+      primary_type: classification.QUERY_CLASSIFICATION.primary_type,
+      complexity: classification.QUERY_CLASSIFICATION.complexity
     });
     
     return {
-      ...classification,
       original_query: query,
-      project_id: projectId
+      project_id: projectId,
+      query_type: classification.QUERY_CLASSIFICATION.primary_type,
+      secondary_types: classification.QUERY_CLASSIFICATION.secondary_types,
+      complexity: classification.QUERY_CLASSIFICATION.complexity,
+      requires_inference: classification.QUERY_CLASSIFICATION.requires_inference,
+      entities: classification.ENTITY_IDENTIFICATION,
+      relationships: classification.RELATIONSHIP_MAPPING,
+      temporal_aspects: classification.TEMPORAL_ASPECTS,
+      analytical_requirements: classification.ANALYTICAL_REQUIREMENTS,
+      response_requirements: classification.RESPONSE_REQUIREMENTS
     };
   } catch (error) {
     logger.error('Error classifying query:', error);
     
     // Return basic classification on error
     return {
-      people: [],
-      locations: [],
-      time_periods: [],
-      topics: [],
-      query_type: 'unknown',
-      query_complexity: 5,
       original_query: query,
-      project_id: projectId
+      project_id: projectId,
+      query_type: 'unknown',
+      secondary_types: [],
+      complexity: 5,
+      requires_inference: false,
+      entities: {
+        characters: [],
+        locations: [],
+        time_periods: [],
+        events: [],
+        themes: [],
+        symbols: []
+      },
+      relationships: {
+        character_relationships: [],
+        location_connections: [],
+        event_chains: [],
+        thematic_links: []
+      },
+      temporal_aspects: {
+        time_focus: 'point',
+        chronology_type: 'linear',
+        temporal_scope: 'full_story'
+      },
+      analytical_requirements: {
+        context_needed: ['factual'],
+        analysis_depth: ['basic'],
+        comparison_points: []
+      },
+      response_requirements: {
+        detail_level: 'moderate',
+        evidence_type: ['events'],
+        structure_preference: 'chronological'
+      }
     };
   }
 }

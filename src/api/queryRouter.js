@@ -21,17 +21,31 @@ router.post('/', async (req, res) => {
   const { signal } = abortController;
 
   // Set up cleanup when client disconnects
+  let isClientDisconnected = false;
   req.on('close', () => {
-    logger.info('Client disconnected, aborting processing');
-    abortController.abort();
+    isClientDisconnected = true;
+    logger.info('Client disconnected, marking for cleanup');
   });
+  
+  // Helper function to check client state
+  const shouldContinue = () => {
+    if (isClientDisconnected) {
+      logger.info('Stopping processing due to client disconnection');
+      return false;
+    }
+    return true;
+  };
 
   // Set up response sent detection
   let isResponseSent = false;
   const originalJson = res.json.bind(res);
   res.json = (...args) => {
+    if (isResponseSent) {
+      logger.warn('Attempting to send response after one was already sent');
+      return;
+    }
     isResponseSent = true;
-    abortController.abort(); // Abort processing after response is sent
+    logger.info('Sending response to client');
     return originalJson(...args);
   };
   try {
