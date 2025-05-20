@@ -53,8 +53,8 @@ class PipelineController {
         complexity: classification.complexity
       });
 
-      // Process through RAG pipeline
-      const expandedQuery = await this.queryExpander.expandQuery(query, classification);
+      // Process through RAG pipeline with book context
+      const expandedQuery = await this.queryExpander.expandQuery(query, this.projectId);
       await this.responseManager.addUpdate(requestId, {
         stage: 'query_expansion',
         expanded: expandedQuery

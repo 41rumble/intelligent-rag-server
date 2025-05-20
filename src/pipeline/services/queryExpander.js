@@ -5,6 +5,24 @@ const logger = require('../../utils/logger');
  * to gather more context and information
  */
 class QueryExpander {
+  constructor() {
+    this.bookMetadata = null;
+  }
+
+  /**
+   * Initialize book metadata for query expansion
+   * @param {string} projectId - Project ID
+   */
+  async initializeBookMetadata(projectId) {
+    if (!this.bookMetadata) {
+      const collection = await mongoClient.getProjectCollection(projectId);
+      this.bookMetadata = await collection.findOne(
+        { type: 'book_metadata' },
+        { projection: { title: 1, author: 1, publication_year: 1 } }
+      );
+    }
+  }
+
   /**
    * Generate context-seeking queries
    * @param {string} originalQuery - The user's original query
@@ -160,14 +178,37 @@ class QueryExpander {
    * @param {string} originalQuery - The user's original query
    * @returns {Object} Expanded queries object
    */
-  async expandQuery(originalQuery) {
+  async expandQuery(originalQuery, projectId) {
     logger.debug(`Expanding query: ${originalQuery}`);
 
+    // Initialize book metadata if needed
+    await this.initializeBookMetadata(projectId);
+
+    if (!this.bookMetadata) {
+      logger.warn('No book metadata found for query expansion');
+      return {
+        original: originalQuery,
+        context_queries: [],
+        temporal_queries: [],
+        relationship_queries: []
+      };
+    }
+
+    // Add book context to original query
+    const bookContextQuery = `In "${this.bookMetadata.title}" by ${this.bookMetadata.author}, ${originalQuery}`;
+
+    // Generate expanded queries with book context
     const expanded = {
-      original: originalQuery,
-      context_queries: this.generateContextQueries(originalQuery),
-      temporal_queries: this.generateTemporalQueries(originalQuery),
-      relationship_queries: this.generateRelationshipQueries(originalQuery)
+      original: bookContextQuery,
+      context_queries: this.generateContextQueries(originalQuery).map(q => 
+        `Regarding "${this.bookMetadata.title}": ${q}`
+      ),
+      temporal_queries: this.generateTemporalQueries(originalQuery).map(q =>
+        `In the context of ${this.bookMetadata.title}, ${q}`
+      ),
+      relationship_queries: this.generateRelationshipQueries(originalQuery).map(q =>
+        `In ${this.bookMetadata.author}'s "${this.bookMetadata.title}", ${q}`
+      )
     };
 
     logger.debug('Generated expanded queries:', expanded);

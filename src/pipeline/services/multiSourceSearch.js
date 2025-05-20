@@ -102,9 +102,42 @@ class MultiSourceSearch {
   async webSearch(query, context = {}) {
     try {
       const webSearch = require('../../utils/webSearch');
-      const results = await webSearch.contextSearch(query, context);
       
-      return results.map(result => ({
+      // Get book metadata to scope the search
+      const collection = await mongoClient.getProjectCollection(this.projectId);
+      const bookMetadata = await collection.findOne(
+        { type: 'book_metadata' },
+        { projection: { title: 1, author: 1, publication_year: 1 } }
+      );
+      
+      if (!bookMetadata) {
+        logger.warn('No book metadata found for web search scoping');
+        return [];
+      }
+
+      // Scope query to the specific book
+      const scopedQuery = `"${bookMetadata.title}" by ${bookMetadata.author} ${query}`;
+      
+      // Add book context to search parameters
+      const searchContext = {
+        ...context,
+        book: {
+          title: bookMetadata.title,
+          author: bookMetadata.author,
+          year: bookMetadata.publication_year
+        }
+      };
+
+      const results = await webSearch.contextSearch(scopedQuery, searchContext);
+      
+      // Filter results to ensure they're about the right book
+      const filteredResults = results.filter(result => {
+        const content = (result.title + ' ' + result.content).toLowerCase();
+        return content.includes(bookMetadata.title.toLowerCase()) ||
+               content.includes(bookMetadata.author.toLowerCase());
+      });
+      
+      return filteredResults.map(result => ({
         source: 'web',
         score: result.score,
         content: result.content,
@@ -112,7 +145,11 @@ class MultiSourceSearch {
           title: result.title,
           url: result.url,
           date: result.date,
-          engine: result.source
+          engine: result.source,
+          book_context: {
+            title: bookMetadata.title,
+            author: bookMetadata.author
+          }
         }
       }));
     } catch (error) {
