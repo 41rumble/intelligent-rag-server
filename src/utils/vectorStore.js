@@ -132,11 +132,19 @@ async function searchVectors(projectId, queryVector, k = 5) {
     // Convert query vector to Float32Array and then to regular array for FAISS
     const queryArray = Array.from(new Float32Array(queryVector));
     
-    const results = await index.search(queryArray, k);
-    return results.labels.map((label, i) => ({
-        id: label.toString(),
-        score: results.distances[i]
-    }));
+    try {
+        const results = await index.search(queryArray, k);
+        return results.labels.map((label, i) => ({
+            id: label.toString(),
+            score: results.distances[i]
+        }));
+    } catch (error) {
+        if (error.message.includes('Invalid the number of k')) {
+            // No vectors in index yet
+            return [];
+        }
+        throw error;
+    }
 }
 
 /**
