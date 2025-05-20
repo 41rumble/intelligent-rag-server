@@ -148,8 +148,7 @@ async function buildAndSaveRelationshipMaps(projectId) {
             };
         }
 
-        // Create output directory structure
-        const projectDir = path.join(process.cwd(), 'ingest', projectId);
+        // Create relationships directory
         const relationshipsDir = path.join(projectDir, 'relationships');
         await fs.mkdir(relationshipsDir, { recursive: true });
         logger.info(`Created relationships directory: ${relationshipsDir}`);
