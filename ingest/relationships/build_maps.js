@@ -4,7 +4,8 @@ const {
     buildCharacterRelationships,
     buildSocialNetworks,
     buildThematicConnections,
-    buildEventNetworks
+    buildEventNetworks,
+    buildDetailedRelationship
 } = require('../../src/relationships/builders');
 
 const logger = require('../../src/utils/logger');

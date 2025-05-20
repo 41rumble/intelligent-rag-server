@@ -314,5 +314,6 @@ module.exports = {
   buildCharacterRelationships,
   buildSocialNetworks,
   buildThematicConnections,
-  buildEventNetworks
+  buildEventNetworks,
+  buildDetailedRelationship
 };
