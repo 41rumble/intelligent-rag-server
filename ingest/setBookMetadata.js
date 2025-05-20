@@ -52,7 +52,7 @@ async function storeMetadata(projectId, metadata) {
     
     // Prepare document that matches schema requirements
     const document = {
-      type: 'book_metadata',
+      type: 'preface',
       project: projectId,
       // Required fields
       text: `${metadata.title} by ${metadata.author}\n\nPublication Year: ${metadata.publication_year}\n\nTime Period: ${metadata.time_period.start} to ${metadata.time_period.end}\n\n${metadata.description || ''}`,
@@ -100,10 +100,10 @@ async function storeMetadata(projectId, metadata) {
     };
 
     // Check if metadata already exists
-    const existing = await collection.findOne({ type: 'book_metadata' });
+    const existing = await collection.findOne({ type: 'preface' });
     if (existing) {
       await collection.updateOne(
-        { type: 'book_metadata' },
+        { type: 'preface' },
         { $set: document }
       );
       console.log('\n✅ Updated existing book metadata');
