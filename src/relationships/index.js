@@ -1,4 +1,5 @@
-const { getProjectCollection } = require('../utils/mongoClient');
+const fs = require('fs').promises;
+const path = require('path');
 const logger = require('../utils/logger');
 const { 
   buildCharacterRelationships,
@@ -15,20 +16,36 @@ async function buildRelationships(projectId) {
   logger.info(`Building relationships for project ${projectId}`);
   
   try {
-    // Get collections
-    const collection = await getProjectCollection(projectId);
+    const projectPath = path.join('ingest', projectId);
     
-    // 1. Load all character bios
-    const bios = await collection.find({ 
-      type: "bio"
-    }).toArray();
+    // 1. Load all character bios from compiled_bios directory
+    const bioFiles = await fs.readdir(path.join(projectPath, 'compiled_bios'));
+    const bios = await Promise.all(
+      bioFiles.filter(f => f.endsWith('.json')).map(async file => {
+        const content = await fs.readFile(
+          path.join(projectPath, 'compiled_bios', file),
+          'utf-8'
+        );
+        return JSON.parse(content);
+      })
+    );
     
     logger.info(`Found ${bios.length} character bios`);
 
-    // 2. Load all chapters
-    const chapters = await collection.find({
-      type: "chapter_text"
-    }).toArray();
+    // 2. Load all chapters from chapters directory
+    const chapterFiles = await fs.readdir(path.join(projectPath, 'chapters'));
+    const chapters = await Promise.all(
+      chapterFiles.filter(f => f.endsWith('.txt')).map(async file => {
+        const content = await fs.readFile(
+          path.join(projectPath, 'chapters', file),
+          'utf-8'
+        );
+        return {
+          chapter_id: path.basename(file, '.txt'),
+          text: content
+        };
+      })
+    );
     
     logger.info(`Found ${chapters.length} chapters`);
 
@@ -38,13 +55,18 @@ async function buildRelationships(projectId) {
     const thematicConnections = await buildThematicConnections(bios, chapters);
     const eventNetworks = await buildEventNetworks(bios, chapters);
 
-    // 4. Store all relationship data
-    await storeRelationshipData(collection, {
+    // 4. Store all relationship data in project directory
+    const relationshipData = {
       relationships,
-      socialNetworks,
-      thematicConnections,
-      eventNetworks
-    });
+      social_networks: socialNetworks,
+      thematic_connections: thematicConnections,
+      event_networks: eventNetworks
+    };
+
+    await fs.writeFile(
+      path.join(projectPath, 'relationships.json'),
+      JSON.stringify(relationshipData, null, 2)
+    );
 
     logger.info('Relationship building completed successfully');
     
@@ -57,42 +79,6 @@ async function buildRelationships(projectId) {
   } catch (error) {
     logger.error('Error building relationships:', error);
     throw error;
-  }
-}
-
-/**
- * Store all relationship data in the database
- * @param {Collection} collection - MongoDB collection
- * @param {Object} data - Relationship data to store
- */
-async function storeRelationshipData(collection, data) {
-  // 1. Remove existing relationship data
-  await collection.deleteMany({
-    type: {
-      $in: [
-        "character_relationship",
-        "social_network",
-        "thematic_connection",
-        "event_network"
-      ]
-    }
-  });
-
-  // 2. Store new relationship data
-  if (data.relationships.length > 0) {
-    await collection.insertMany(data.relationships);
-  }
-  
-  if (data.socialNetworks.length > 0) {
-    await collection.insertMany(data.socialNetworks);
-  }
-  
-  if (data.thematicConnections.length > 0) {
-    await collection.insertMany(data.thematicConnections);
-  }
-  
-  if (data.eventNetworks.length > 0) {
-    await collection.insertMany(data.eventNetworks);
   }
 }
 
