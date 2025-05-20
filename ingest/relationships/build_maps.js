@@ -155,13 +155,39 @@ async function buildAndSaveRelationshipMaps(projectId) {
         logger.info(`Found ${relationshipMaps.timeline.length} timeline events`);
         
         // Save different aspects to separate files for easier analysis
-        // Save all relationship data to a single file
-        const relationshipsPath = path.join(outputDir, 'relationships.json');
-        logger.info(`Saving relationships to: ${relationshipsPath}`);
-        await fs.writeFile(
-            relationshipsPath,
-            JSON.stringify(relationshipMaps, null, 2)
-        );
+        // Create relationships directory
+        const relationshipsDir = path.join(outputDir, 'relationships');
+        await fs.mkdir(relationshipsDir, { recursive: true });
+        logger.info(`Created relationships directory: ${relationshipsDir}`);
+
+        // Save each relationship as a separate file
+        for (const [source, targets] of Object.entries(relationshipMaps.direct_relationships)) {
+            for (const [target, data] of Object.entries(targets)) {
+                const filename = `${source}__${target}.json`;
+                const filePath = path.join(relationshipsDir, filename);
+                
+                const relationshipData = {
+                    source_character: source,
+                    target_character: target,
+                    relationship_type: data.type,
+                    strength: data.strength,
+                    key_interactions: data.key_interactions,
+                    current_state: data.current_state,
+                    // Add any relevant community info
+                    communities: relationshipMaps.communities
+                        .filter(c => c.includes(source) && c.includes(target)),
+                    // Add relevant timeline events
+                    timeline: relationshipMaps.timeline
+                        .filter(t => t.characters.includes(source) && t.characters.includes(target))
+                };
+
+                logger.info(`Saving relationship to: ${filePath}`);
+                await fs.writeFile(
+                    filePath,
+                    JSON.stringify(relationshipData, null, 2)
+                );
+            }
+        }
 
         logger.info(`Successfully saved relationship maps for project ${projectId} to ${outputDir}`);
         return relationshipMaps;
