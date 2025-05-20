@@ -3,7 +3,10 @@ const { classifyQuery } = require('../queryClassifier');
 const QueryExpander = require('../services/queryExpander');
 const QueryRouter = require('../services/queryRouter');
 const InfoSynthesizer = require('../services/infoSynthesizer');
+const ResponseManager = require('../services/responseManager');
+const BookContextEnforcer = require('../../middleware/bookContextEnforcer');
 const { generateStructuredResponse } = require('../../utils/llmProvider');
+const { v4: uuidv4 } = require('uuid');
 
 /**
  * Controller for managing the RAG pipeline
@@ -14,6 +17,13 @@ class PipelineController {
     this.queryExpander = new QueryExpander();
     this.queryRouter = new QueryRouter(projectId);
     this.infoSynthesizer = new InfoSynthesizer();
+    this.responseManager = new ResponseManager();
+
+    // Set up response manager event handling
+    this.responseManager.on('update', (requestId, update) => {
+      // This will be connected to the WebSocket/SSE handler
+      logger.debug('Response update:', { requestId, type: update.type });
+    });
   }
 
   /**
@@ -23,34 +33,135 @@ class PipelineController {
    * @returns {Promise<Object>} Processed result
    */
   async process(query, thinkingDepth = 1) {
+    const requestId = uuidv4();
+    const responseController = this.responseManager.initializeStream(requestId);
+
     try {
       logger.info(`Processing query at thinking depth ${thinkingDepth}: ${query}`);
 
-      // Step 1: Classify query
+      // Step 1: Enforce book context
+      const contextualizedQuery = await BookContextEnforcer.enforceContext(query, this.projectId);
+      query = BookContextEnforcer.enhanceWithBookContext(
+        contextualizedQuery.rewritten,
+        contextualizedQuery.type
+      );
+
+      // Step 2: Classify query
       const classification = await classifyQuery(query, this.projectId);
       logger.debug('Query classification:', {
         type: classification.primary_type,
         complexity: classification.complexity
       });
 
-      // Step 2: Expand query based on classification
-      const expandedQuery = await this.queryExpander.expandQuery(query, classification);
-      logger.debug('Expanded query:', expandedQuery);
+      // Step 3: Get quick initial answer
+      const quickAnswer = await this.generateQuickAnswer(query, classification);
+      await this.responseManager.streamInitialAnswer(requestId, quickAnswer);
 
-      // Step 3: Route query to appropriate search strategies
+      // Start background processing
+      this.processInBackground(requestId, query, classification, thinkingDepth).catch(error => {
+        logger.error('Background processing error:', error);
+        this.responseManager.handleError(requestId, error);
+      });
+
+      return {
+        requestId,
+        initial_answer: quickAnswer,
+        metadata: {
+          classification: {
+            primary_type: classification.primary_type,
+            complexity: classification.complexity
+          },
+          status: 'processing'
+        }
+      };
+
+    } catch (error) {
+      logger.error('Error in pipeline processing:', error);
+      this.responseManager.handleError(requestId, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate a quick initial answer
+   * @param {string} query - Original query
+   * @param {Object} classification - Query classification
+   * @returns {Promise<Object>} Quick answer
+   */
+  async generateQuickAnswer(query, classification) {
+    const prompt = `
+    Provide a quick initial response to this book-related question:
+    "${query}"
+
+    Query Type: ${classification.primary_type}
+    Complexity: ${classification.complexity}
+
+    Requirements:
+    1. Focus ONLY on the book's content
+    2. Be clear this is an initial response
+    3. Keep it concise but informative
+    4. Mention that more detailed analysis is coming
+
+    Format as JSON with:
+    - initial_answer: 1-2 paragraph response
+    - confidence: 0-1 score
+    - expects_enhancement: true/false based on query complexity
+    `;
+
+    return await generateStructuredResponse(prompt, {
+      temperature: 0.3,
+      maxTokens: 250
+    });
+  }
+
+  /**
+   * Process query in background for enhanced response
+   * @param {string} requestId - Request identifier
+   * @param {string} query - Original query
+   * @param {Object} classification - Query classification
+   * @param {number} thinkingDepth - Processing depth
+   */
+  async processInBackground(requestId, query, classification, thinkingDepth) {
+    try {
+      // Check if we should continue processing
+      if (this.responseManager.shouldTerminate(requestId)) {
+        return;
+      }
+
+      // Step 1: Expand query based on classification
+      const expandedQuery = await this.queryExpander.expandQuery(query, classification);
+      await this.responseManager.addBackgroundUpdate(requestId, {
+        stage: 'query_expansion',
+        expanded: expandedQuery
+      });
+
+      // Check processing time
+      if (this.responseManager.shouldTerminate(requestId)) {
+        return;
+      }
+
+      // Step 2: Route query to appropriate search strategies
       const searchResults = await this.queryRouter.routeQuery({
         ...classification,
         original_query: query,
         expanded_query: expandedQuery,
         thinking_depth: thinkingDepth
       });
-      logger.debug('Search results:', {
-        primary: searchResults.primary.length,
-        supporting: searchResults.supporting.length,
-        context: searchResults.context.length
+      await this.responseManager.addBackgroundUpdate(requestId, {
+        stage: 'search_complete',
+        result_counts: {
+          primary: searchResults.primary.length,
+          supporting: searchResults.supporting.length,
+          context: searchResults.context.length
+        }
       });
 
-      // Step 4: Synthesize information based on query type
+      // Check processing time
+      if (this.responseManager.shouldTerminate(requestId)) {
+        return;
+      }
+
+      // Step 3: Synthesize information based on query type
       const synthesized = await this.infoSynthesizer.synthesize(
         {
           primary: searchResults.primary,
@@ -62,15 +173,9 @@ class PipelineController {
           thinking_depth: thinkingDepth
         }
       );
-      logger.debug('Synthesized information:', {
-        keyPoints: synthesized.keyPoints?.length || 0,
-        timeline: synthesized.timeline?.length || 0,
-        relationships: synthesized.relationships?.length || 0,
-        analysis: synthesized.analysis ? Object.keys(synthesized.analysis) : []
-      });
 
-      // Step 5: Generate final answer based on query type
-      const answer = await this.generateAnswer(
+      // Step 4: Generate enhanced final answer
+      const enhancedAnswer = await this.generateAnswer(
         query,
         {
           classification,
@@ -80,8 +185,9 @@ class PipelineController {
         }
       );
 
-      return {
-        answer,
+      // Finalize response
+      await this.responseManager.finalizeResponse(requestId, {
+        answer: enhancedAnswer,
         supporting_info: synthesized,
         metadata: {
           classification: {
@@ -100,10 +206,11 @@ class PipelineController {
             context: searchResults.context.length
           }
         }
-      };
+      });
+
     } catch (error) {
-      logger.error('Error in pipeline processing:', error);
-      throw error;
+      logger.error('Error in background processing:', error);
+      this.responseManager.handleError(requestId, error);
     }
   }
 
