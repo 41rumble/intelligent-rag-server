@@ -1,7 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { buildCharacterRelationships } = require('../../src/relationships/builders');
-const { getProjectCollection } = require('../../src/utils/mongoClient');
+
 const logger = require('../../src/utils/logger');
 
 /**
@@ -141,18 +141,11 @@ async function buildAndSaveRelationshipMaps(projectId) {
         // This is a placeholder - you might want to use a more sophisticated algorithm
         relationshipMaps.communities = detectCommunities(relationshipMaps.graph);
 
-        // Save to MongoDB
-        await collection.updateOne(
-            { type: 'relationship_maps', project_id: projectId },
-            { $set: relationshipMaps },
-            { upsert: true }
-        );
-
         // Save to file system
         const cwd = process.cwd();
         logger.info(`Current working directory: ${cwd}`);
         
-        const outputDir = path.join(cwd, 'ingest', projectId, 'relationship_maps');
+        const outputDir = path.join(cwd, 'ingest', projectId);
         logger.info(`Creating output directory: ${outputDir}`);
         await fs.mkdir(outputDir, { recursive: true });
         
@@ -162,39 +155,11 @@ async function buildAndSaveRelationshipMaps(projectId) {
         logger.info(`Found ${relationshipMaps.timeline.length} timeline events`);
         
         // Save different aspects to separate files for easier analysis
-        const directRelPath = path.join(outputDir, 'direct_relationships.json');
-        logger.info(`Saving direct relationships to: ${directRelPath}`);
+        // Save all relationship data to a single file
+        const relationshipsPath = path.join(outputDir, 'relationships.json');
+        logger.info(`Saving relationships to: ${relationshipsPath}`);
         await fs.writeFile(
-            directRelPath,
-            JSON.stringify(relationshipMaps.direct_relationships, null, 2)
-        );
-        
-        const commPath = path.join(outputDir, 'communities.json');
-        logger.info(`Saving communities to: ${commPath}`);
-        await fs.writeFile(
-            commPath,
-            JSON.stringify(relationshipMaps.communities, null, 2)
-        );
-        
-        const timelinePath = path.join(outputDir, 'timeline.json');
-        logger.info(`Saving timeline to: ${timelinePath}`);
-        await fs.writeFile(
-            timelinePath,
-            JSON.stringify(relationshipMaps.timeline, null, 2)
-        );
-        
-        const graphPath = path.join(outputDir, 'graph.json');
-        logger.info(`Saving graph to: ${graphPath}`);
-        await fs.writeFile(
-            graphPath,
-            JSON.stringify(relationshipMaps.graph, null, 2)
-        );
-
-        // Save complete maps
-        const completePath = path.join(outputDir, 'complete_maps.json');
-        logger.info(`Saving complete maps to: ${completePath}`);
-        await fs.writeFile(
-            completePath,
+            relationshipsPath,
             JSON.stringify(relationshipMaps, null, 2)
         );
 
