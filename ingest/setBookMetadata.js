@@ -92,6 +92,7 @@ async function storeMetadata(projectId, metadata) {
       publisher: metadata.publisher || '',
       description: metadata.description || '',
       genre: metadata.genre || []
+    };
 
     // Check if metadata already exists
     const existing = await collection.findOne({ type: 'book_metadata' });
