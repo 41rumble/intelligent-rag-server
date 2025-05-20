@@ -70,14 +70,14 @@ async function vectorSearch(query, projectId, limit = 5) {
  */
 async function metadataSearch(queryInfo, limit = 5) {
   try {
-    const { project_id, people, locations, time_periods, topics } = queryInfo;
-    const collection = await mongoClient.getProjectCollection(project_id);
+    const { projectId } = queryInfo;
+    const collection = await mongoClient.getProjectCollection(projectId);
     
     // Get book metadata for time period context
-    const bookMetadata = await getBookMetadata(project_id);
+    const bookMetadata = await getBookMetadata(projectId);
     
     // Build filter based on available metadata
-    const filter = { project: project_id };
+    const filter = { project: projectId };
     
     // Add time period filter if available
     if (bookMetadata?.time_period) {
@@ -92,12 +92,7 @@ async function metadataSearch(queryInfo, limit = 5) {
     }
     
     // Add tag filters if available
-    const tagFilters = [
-      ...people,
-      ...locations,
-      ...time_periods,
-      ...topics
-    ].filter(Boolean);
+    const tagFilters = [];
     
     if (tagFilters.length > 0) {
       filter.tags = { $in: tagFilters };
@@ -109,7 +104,7 @@ async function metadataSearch(queryInfo, limit = 5) {
       .toArray();
     
     logger.info('Metadata search completed:', { 
-      project_id,
+      projectId,
       filter,
       results_count: results.length
     });
@@ -215,14 +210,14 @@ async function getBookMetadata(projectId) {
 
 async function retrieveDocuments(query, queryInfo, limit = 10) {
   try {
-    const projectId = queryInfo.project_id;
+    const projectId = queryInfo.projectId;
     
     // Get book metadata first
     const bookMetadata = await getBookMetadata(projectId);
     
     logger.info('Starting sequential document retrieval:', {
       query,
-      project_id: projectId,
+      projectId,
       book_title: bookMetadata?.title,
       search_types: ['vector', 'metadata', 'text']
     });
@@ -274,7 +269,7 @@ async function retrieveDocuments(query, queryInfo, limit = 10) {
     
     logger.info('Document retrieval completed:', { 
       query,
-      project_id: projectId,
+      projectId,
       total_results_before_dedup: vectorResults.length + metadataResults.length + textResults.length,
       unique_results: combinedResults.length,
       final_results: finalResults.length,
