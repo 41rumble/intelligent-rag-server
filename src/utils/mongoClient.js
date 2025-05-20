@@ -111,7 +111,7 @@ async function initializeCollection(projectId) {
           properties: {
             type: {
               bsonType: "string",
-              enum: ["chapter_synopsis", "bio", "acknowledgement", "preface", "chapter_text"]
+              enum: ["chapter_synopsis", "bio", "acknowledgement", "preface", "chapter_text", "character_relationship"]
             },
             project: {
               bsonType: "string"

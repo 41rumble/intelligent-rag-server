@@ -18,8 +18,8 @@ const relationshipsPath = path.join(projectPath, 'relationships');
  */
 async function processRelationshipMaps() {
   try {
-    // Use a separate collection for relationships
-    const collection = await mongoClient.getProjectCollection(`${projectId}_relationships`);
+    // Use the main project collection
+    const collection = await mongoClient.getProjectCollection(projectId);
     
     // Get all relationship files
     const mapFiles = await fs.readdir(relationshipsPath);
@@ -96,6 +96,8 @@ async function processRelationshipMaps() {
         type: 'character_relationship',
         project: projectId,
         ...validatedMap,
+        // Required field 'text' for schema validation - combine key info
+        text: `Relationship between ${validatedMap.source_character} and ${validatedMap.target_character}: ${validatedMap.relationship_type}`,
         key,
         created_at: new Date(),
         updated_at: new Date()
@@ -155,8 +157,8 @@ async function processRelationshipMaps() {
  */
 async function main() {
   try {
-    // We don't need schema validation for relationships collection
-    const collection = await mongoClient.getProjectCollection(`${projectId}_relationships`);
+    // Initialize MongoDB collection with schema validation
+    await mongoClient.initializeCollection(projectId);
     
     // Process relationship maps
     await processRelationshipMaps();
