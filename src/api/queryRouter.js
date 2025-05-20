@@ -126,23 +126,24 @@ router.post('/', async (req, res) => {
         throw error;
       });
     
-    // Combine all retrieved documents
-    const documentMap = new Map();
-    retrievalResults.forEach(docs => {
-      docs.forEach(doc => {
-        documentMap.set(doc._id, doc);
+      // Combine all retrieved documents
+      const documentMap = new Map();
+      retrievalResults.forEach(docs => {
+        docs.forEach(doc => {
+          documentMap.set(doc._id, doc);
+        });
       });
-    });
     
-    retrievedDocuments = Array.from(documentMap.values());
-    responseLog.steps.push({
-      step: 'retrieve_documents',
-      result: {
-        query_count: allQueries.length,
-        document_count: retrievedDocuments.length,
-        document_ids: retrievedDocuments.map(doc => doc._id)
-      }
-    });
+      retrievedDocuments = Array.from(documentMap.values());
+      responseLog.steps.push({
+        step: 'retrieve_documents',
+        result: {
+          query_count: allQueries.length,
+          document_count: retrievedDocuments.length,
+          document_ids: retrievedDocuments.map(doc => doc._id)
+        }
+      });
+    }
     
     // Step 5: Web search (if thinkingDepth >= 7)
     if (thinkingDepth >= 7 && shouldContinue()) {
@@ -234,15 +235,19 @@ ${finalPrompt.prompt}`;
           throw error;
         });
       }
-    responseLog.steps.push({
-      step: 'generate_initial_answer',
-      result: {
-        prompt_length: finalPrompt.prompt.length,
-        answer_length: answer.length,
-        context_sources: compressedKnowledge.source_ids,
-        has_web_data: !!webSummary
+
+      if (answer && finalPrompt) {
+        responseLog.steps.push({
+          step: 'generate_initial_answer',
+          result: {
+            prompt_length: finalPrompt.prompt.length,
+            answer_length: answer.length,
+            context_sources: compressedKnowledge?.source_ids || [],
+            has_web_data: !!webSummary
+          }
+        });
       }
-    });
+    }
     
     // Step 8: Evaluate answer (if thinkingDepth >= 9)
     if (thinkingDepth >= 9) {
