@@ -165,20 +165,33 @@ async function buildAndSaveRelationshipMaps(projectId) {
                     ...data
                 };
 
-                logger.info(`Saving relationship to: ${filePath}`);
-                await fs.writeFile(
-                    filePath,
-                    JSON.stringify(relationshipData, null, 2)
-                );
+                logger.info(`Saving relationship file: ${filePath}`);
+                try {
+                    await fs.writeFile(
+                        filePath,
+                        JSON.stringify(relationshipData, null, 2)
+                    );
+                    logger.info(`Successfully saved relationship file: ${filePath}`);
+                } catch (error) {
+                    logger.error(`Failed to save relationship file ${filePath}:`, error);
+                    throw error;
+                }
             }
         }
 
         // Save the full relationship maps for reference
         const fullMapsPath = path.join(relationshipsDir, 'full_maps.json');
-        await fs.writeFile(
-            fullMapsPath,
-            JSON.stringify(relationshipMaps, null, 2)
-        );
+        logger.info(`Saving full relationship maps to: ${fullMapsPath}`);
+        try {
+            await fs.writeFile(
+                fullMapsPath,
+                JSON.stringify(relationshipMaps, null, 2)
+            );
+            logger.info(`Successfully saved full relationship maps to: ${fullMapsPath}`);
+        } catch (error) {
+            logger.error(`Failed to save full relationship maps to ${fullMapsPath}:`, error);
+            throw error;
+        }
         
         logger.info(`Successfully saved relationship maps for project ${projectId} to ${relationshipsDir}`);
         return relationshipMaps;
