@@ -2,6 +2,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const logger = require('../src/utils/logger');
 const { generateStructuredResponse } = require('../src/utils/llmProvider');
+const { extractAndStoreMetadata } = require('./extractBookMetadata');
 require('dotenv').config();
 
 // Project ID from command line or default
@@ -216,6 +217,10 @@ async function main() {
     
     logger.info(`Found ${chapterIds.length} chapters to process`);
     
+    // Extract and store book metadata first
+    await extractAndStoreMetadata(projectId);
+    logger.info('Book metadata extracted and stored');
+
     // Process each chapter
     for (const chapterId of chapterIds) {
       await processChapter(chapterId);
