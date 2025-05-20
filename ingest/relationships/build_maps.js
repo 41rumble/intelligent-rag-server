@@ -167,41 +167,58 @@ async function buildAndSaveRelationshipMaps(projectId) {
         // About to start file operations
         logger.info('About to start file operations');
         logger.info('Project directory:', projectDir);
+        logger.info('Relationships array before file ops:', JSON.stringify({
+            count: relationships.length,
+            first_few: relationships.slice(0, 2)
+        }, null, 2));
         
         // Create relationships directory
         const relationshipsDir = path.join(projectDir, 'relationships');
-        await fs.mkdir(relationshipsDir, { recursive: true });
-        logger.info(`Created relationships directory: ${relationshipsDir}`);
+        logger.info('Creating directory:', relationshipsDir);
+        try {
+            await fs.mkdir(relationshipsDir, { recursive: true });
+            logger.info(`Successfully created relationships directory: ${relationshipsDir}`);
+        } catch (error) {
+            logger.error(`Error creating directory ${relationshipsDir}:`, error);
+            throw error;
+        }
 
         // Debug log relationship data
         logger.info('Direct relationships object:', JSON.stringify(relationshipMaps.direct_relationships, null, 2));
         logger.info('Starting to save individual relationship files...');
 
         // Save each relationship as a separate file
-        for (const [source, targets] of Object.entries(relationshipMaps.direct_relationships)) {
-            logger.info(`Processing relationships for source: ${source} with targets:`, Object.keys(targets));
-            for (const [target, data] of Object.entries(targets)) {
-                const filename = `${source}__${target}.json`;
-                const filePath = path.join(relationshipsDir, filename);
-                
-                const relationshipData = {
-                    source_character: source,
-                    target_character: target,
-                    ...data
-                };
+        logger.info('Starting to process relationships for files...');
+        try {
+            for (const [source, targets] of Object.entries(relationshipMaps.direct_relationships)) {
+                logger.info(`Processing relationships for source: ${source} with targets:`, Object.keys(targets));
+                for (const [target, data] of Object.entries(targets)) {
+                    const filename = `${source}__${target}.json`;
+                    const filePath = path.join(relationshipsDir, filename);
+                    
+                    const relationshipData = {
+                        source_character: source,
+                        target_character: target,
+                        ...data
+                    };
 
-                logger.info(`Saving relationship file: ${filePath}`);
-                try {
-                    await fs.writeFile(
-                        filePath,
-                        JSON.stringify(relationshipData, null, 2)
-                    );
-                    logger.info(`Successfully saved relationship file: ${filePath}`);
-                } catch (error) {
-                    logger.error(`Failed to save relationship file ${filePath}:`, error);
-                    throw error;
+                    logger.info(`Saving relationship file: ${filePath}`);
+                    try {
+                        await fs.writeFile(
+                            filePath,
+                            JSON.stringify(relationshipData, null, 2)
+                        );
+                        logger.info(`Successfully saved relationship file: ${filePath}`);
+                    } catch (error) {
+                        logger.error(`Failed to save relationship file ${filePath}:`, error);
+                        throw error;
+                    }
                 }
             }
+            logger.info('Finished processing all relationship files');
+        } catch (error) {
+            logger.error('Error in relationship file processing:', error);
+            throw error;
         }
 
         // Save the full relationship maps for reference
