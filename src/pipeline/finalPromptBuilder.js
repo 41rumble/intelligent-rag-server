@@ -12,19 +12,24 @@ require('dotenv').config();
  */
 async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = null, evaluationInfo = null) {
   try {
-    // Base context
+    // Validate required inputs
+    if (!queryInfo || !compressedKnowledge || !compressedKnowledge.compressed_text) {
+      throw new Error('Missing required context for prompt building');
+    }
+
+    // Base context with more structured information
     let context = `
-    QUERY: "${queryInfo.original_query}"
+    QUERY INFORMATION:
+    - Original Query: "${queryInfo.original_query}"
+    - Project ID: "${queryInfo.project_id}"
+    - Query Type: ${queryInfo.query_type || 'General'}
+    - Query Focus: ${queryInfo.focus || 'Not specified'}
     
-    PROJECT: "${queryInfo.project_id}"
-    
-    QUERY TYPE: ${queryInfo.query_type || 'General'}
-    
-    RELEVANT KNOWLEDGE:
+    CORE KNOWLEDGE BASE:
     ${compressedKnowledge.compressed_text}
     
-    KEY POINTS:
-    ${compressedKnowledge.key_points.map(point => `- ${point}`).join('\n')}
+    ESSENTIAL POINTS:
+    ${compressedKnowledge.key_points.map((point, i) => `${i + 1}. ${point}`).join('\n')}
     `;
     
     // Add web search information if available
@@ -101,19 +106,36 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
  */
 async function generateFinalAnswer(finalPrompt) {
   try {
+    // Validate and clean the prompt
+    if (!finalPrompt || typeof finalPrompt !== 'string') {
+      throw new Error('Invalid prompt format');
+    }
+
+    // Generate the answer with more focused parameters
     const answer = await generateCompletion(finalPrompt, {
-      temperature: 0.7,
-      maxTokens: 2000
+      temperature: 0.5, // Lower temperature for more focused answers
+      maxTokens: 1500,  // Slightly shorter but more concise answers
+      presencePenalty: 0.5, // Encourage diversity in response
+      frequencyPenalty: 0.3 // Reduce repetition
     });
+    
+    // Validate the answer
+    if (!answer || answer.trim().length === 0) {
+      throw new Error('Empty or invalid answer generated');
+    }
     
     logger.info('Final answer generated:', { 
-      answer_length: answer.length
+      answer_length: answer.length,
+      prompt_length: finalPrompt.length
     });
     
-    return answer;
+    return answer.trim();
   } catch (error) {
-    logger.error('Error generating final answer:', error);
-    return 'I apologize, but I encountered an error while generating an answer to your query. Please try again or rephrase your question.';
+    logger.error('Error generating final answer:', {
+      error: error.message,
+      prompt_length: finalPrompt?.length
+    });
+    throw error; // Let the router handle the error
   }
 }
 

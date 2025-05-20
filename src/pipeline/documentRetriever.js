@@ -220,19 +220,24 @@ async function retrieveDocuments(query, queryInfo, limit = 10) {
     // Get book metadata first
     const bookMetadata = await getBookMetadata(projectId);
     
-    logger.info('Starting parallel document retrieval:', {
+    logger.info('Starting sequential document retrieval:', {
       query,
       project_id: projectId,
       book_title: bookMetadata?.title,
       search_types: ['vector', 'metadata', 'text']
     });
 
-    // Run searches in parallel
-    const [vectorResults, metadataResults, textResults] = await Promise.all([
-      vectorSearch(query, projectId, limit),
-      metadataSearch(queryInfo, limit),
-      textSearch(query, projectId, limit)
-    ]);
+    // Run vector search first as it's most relevant
+    const vectorResults = await vectorSearch(query, projectId, limit);
+    logger.info('Vector search completed', { count: vectorResults.length });
+
+    // Then metadata search to add context
+    const metadataResults = await metadataSearch(queryInfo, limit);
+    logger.info('Metadata search completed', { count: metadataResults.length });
+
+    // Finally text search for any missing information
+    const textResults = await textSearch(query, projectId, limit);
+    logger.info('Text search completed', { count: textResults.length });
 
     logger.info('Individual search results:', {
       vector_count: vectorResults.length,

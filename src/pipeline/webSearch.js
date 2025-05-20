@@ -8,13 +8,15 @@ const searxngInstance = process.env.SEARXNG_INSTANCE;
 
 // Axios instance with custom config
 const axiosInstance = axios.create({
-  timeout: 10000, // 10 second timeout
-  maxRedirects: 5
+  timeout: 5000, // 5 second timeout
+  maxRedirects: 3,
+  keepAlive: false // Don't keep connections alive
 });
 
 // Retry configuration
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000; // 1 second
+const MAX_RETRIES = 2;
+const RETRY_DELAY = 500; // 0.5 second
+const TOTAL_TIMEOUT = 10000; // 10 seconds total timeout
 
 /**
  * Sleep function for retry delay
@@ -30,16 +32,22 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
  * @returns {Promise} Promise that resolves with the response
  */
 async function withRetry(requestFn, retries = MAX_RETRIES) {
+  const startTime = Date.now();
+  
   try {
     return await requestFn();
   } catch (error) {
-    if (retries > 0) {
+    if (retries > 0 && (Date.now() - startTime) < TOTAL_TIMEOUT) {
       logger.warn(`Request failed, retrying... (${retries} attempts remaining)`, {
         error: error.message,
-        code: error.code
+        code: error.code,
+        elapsed: Date.now() - startTime
       });
       await sleep(RETRY_DELAY);
       return withRetry(requestFn, retries - 1);
+    }
+    if ((Date.now() - startTime) >= TOTAL_TIMEOUT) {
+      throw new Error('Total timeout exceeded');
     }
     throw error;
   }
