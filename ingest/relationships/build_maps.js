@@ -1,6 +1,11 @@
 const fs = require('fs').promises;
 const path = require('path');
-const { buildCharacterRelationships } = require('../../src/relationships/builders');
+const { 
+    buildCharacterRelationships,
+    buildSocialNetworks,
+    buildThematicConnections,
+    buildEventNetworks
+} = require('../../src/relationships/builders');
 
 const logger = require('../../src/utils/logger');
 
@@ -77,8 +82,11 @@ async function buildAndSaveRelationshipMaps(projectId) {
             throw new Error('No chapters found');
         }
         
-        // Build relationships
+        // Build all relationship types
         const relationships = await buildCharacterRelationships(bios, chapters);
+        const socialNetworks = await buildSocialNetworks(bios, chapters);
+        const thematicConnections = await buildThematicConnections(bios, chapters);
+        const eventNetworks = await buildEventNetworks(bios, chapters);
         
         // Create optimized lookup maps
         const relationshipMaps = {
@@ -87,79 +95,62 @@ async function buildAndSaveRelationshipMaps(projectId) {
             created_at: new Date(),
             // Character to character direct relationships
             direct_relationships: {},
+            social_networks: socialNetworks,
+            thematic_connections: thematicConnections,
+            event_networks: eventNetworks,
             // Character groups and communities
-            communities: [],
+            communities: socialNetworks.map(network => network.members.map(m => m.character)),
             // Timeline of relationship developments
-            timeline: [],
+            timeline: eventNetworks.map(event => ({
+                event: event.event,
+                type: event.event_type,
+                characters: event.participants.map(p => p.character),
+                chapters: event.chapters
+            })),
             // Graph representation for path finding
             graph: {
-                nodes: [],
-                edges: []
+                nodes: bios.map(bio => ({
+                    id: bio.name,
+                    type: 'character',
+                    data: {
+                        name: bio.name,
+                        role: bio.role,
+                        tags: bio.tags || []
+                    }
+                })),
+                edges: relationships.map(rel => ({
+                    source: rel.source_character,
+                    target: rel.target_character,
+                    type: rel.type,
+                    weight: rel.strength
+                }))
             }
         };
 
         // Process relationships into optimized maps
         for (const rel of relationships) {
-            // Direct relationships lookup
             if (!relationshipMaps.direct_relationships[rel.source_character]) {
                 relationshipMaps.direct_relationships[rel.source_character] = {};
             }
             relationshipMaps.direct_relationships[rel.source_character][rel.target_character] = {
-                strength: rel.strength,
                 type: rel.type,
-                key_interactions: rel.key_moments.slice(0, 5), // Top 5 key moments
-                current_state: rel.progression.current_state
+                strength: rel.strength,
+                key_interactions: rel.key_moments,
+                current_state: rel.progression.current_state,
+                // Add relevant community info
+                communities: relationshipMaps.communities.filter(c => 
+                    c.includes(rel.source_character) && c.includes(rel.target_character)
+                ),
+                // Add relevant timeline events
+                timeline: relationshipMaps.timeline.filter(t =>
+                    t.characters.includes(rel.source_character) && t.characters.includes(rel.target_character)
+                )
             };
-
-            // Add to graph
-            if (!relationshipMaps.graph.nodes.includes(rel.source_character)) {
-                relationshipMaps.graph.nodes.push(rel.source_character);
-            }
-            if (!relationshipMaps.graph.nodes.includes(rel.target_character)) {
-                relationshipMaps.graph.nodes.push(rel.target_character);
-            }
-            relationshipMaps.graph.edges.push({
-                source: rel.source_character,
-                target: rel.target_character,
-                weight: rel.strength.score
-            });
-
-            // Add significant changes to timeline
-            rel.progression.significant_changes.forEach(change => {
-                relationshipMaps.timeline.push({
-                    characters: [rel.source_character, rel.target_character],
-                    change: change,
-                    chapter: change.chapter
-                });
-            });
         }
-
-        // Sort timeline
-        relationshipMaps.timeline.sort((a, b) => a.chapter.localeCompare(b.chapter));
-
-        // Detect communities using simple clustering
-        // This is a placeholder - you might want to use a more sophisticated algorithm
-        relationshipMaps.communities = detectCommunities(relationshipMaps.graph);
-
-        // Save to file system
-        const cwd = process.cwd();
-        logger.info(`Current working directory: ${cwd}`);
-        
-        const outputDir = path.join(cwd, 'ingest', projectId);
-        logger.info(`Creating output directory: ${outputDir}`);
-        await fs.mkdir(outputDir, { recursive: true });
-        
-        // Log the data we're about to save
-        logger.info(`Found ${Object.keys(relationshipMaps.direct_relationships).length} direct relationships`);
-        logger.info(`Found ${relationshipMaps.communities.length} communities`);
-        logger.info(`Found ${relationshipMaps.timeline.length} timeline events`);
-        
-        // Save different aspects to separate files for easier analysis
         // Create relationships directory
         const relationshipsDir = path.join(outputDir, 'relationships');
         await fs.mkdir(relationshipsDir, { recursive: true });
         logger.info(`Created relationships directory: ${relationshipsDir}`);
-
         // Save each relationship as a separate file
         for (const [source, targets] of Object.entries(relationshipMaps.direct_relationships)) {
             for (const [target, data] of Object.entries(targets)) {
@@ -169,16 +160,7 @@ async function buildAndSaveRelationshipMaps(projectId) {
                 const relationshipData = {
                     source_character: source,
                     target_character: target,
-                    relationship_type: data.type,
-                    strength: data.strength,
-                    key_interactions: data.key_interactions,
-                    current_state: data.current_state,
-                    // Add any relevant community info
-                    communities: relationshipMaps.communities
-                        .filter(c => c.includes(source) && c.includes(target)),
-                    // Add relevant timeline events
-                    timeline: relationshipMaps.timeline
-                        .filter(t => t.characters.includes(source) && t.characters.includes(target))
+                    ...data
                 };
 
                 logger.info(`Saving relationship to: ${filePath}`);
@@ -188,13 +170,8 @@ async function buildAndSaveRelationshipMaps(projectId) {
                 );
             }
         }
-
         logger.info(`Successfully saved relationship maps for project ${projectId} to ${outputDir}`);
         return relationshipMaps;
-
-    } catch (error) {
-        logger.error('Error building relationship maps:', error);
-        throw error;
     }
 }
 
