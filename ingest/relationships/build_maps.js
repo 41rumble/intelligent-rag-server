@@ -172,6 +172,9 @@ async function buildAndSaveRelationshipMaps(projectId) {
         }
         logger.info(`Successfully saved relationship maps for project ${projectId} to ${outputDir}`);
         return relationshipMaps;
+    } catch (error) {
+        logger.error('Error building relationship maps:', error);
+        throw error;
     }
 }
 
