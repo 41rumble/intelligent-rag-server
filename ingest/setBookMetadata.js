@@ -52,27 +52,55 @@ async function storeMetadata(projectId, metadata) {
     
     // Prepare document that matches schema requirements
     const document = {
-      type: 'book_metadata',
+      // Use preface type as it's most suitable for book metadata
+      type: 'preface',
       project: projectId,
-      text: `${metadata.title} by ${metadata.author}`, // Required by schema
+      // Required fields
+      text: `${metadata.title} by ${metadata.author}\n\nPublication Year: ${metadata.publication_year}\n\nTime Period: ${metadata.time_period.start} to ${metadata.time_period.end}\n\n${metadata.description || ''}`,
       title: metadata.title,
       name: metadata.title,
+      
+      // Timeline data
       timeline_data: {
+        date: metadata.time_period.start,
         time_period: `${metadata.time_period.start} to ${metadata.time_period.end}`
       },
-      // Add other metadata fields
-      ...metadata,
-      // Add required technical metadata
+      
+      // Add locations if any significant places are mentioned
+      locations: [{
+        location: "Book Setting",
+        description: `Time period from ${metadata.time_period.start} to ${metadata.time_period.end}`
+      }],
+      
+      // Add basic event structure
+      events: [{
+        event: "Book Publication",
+        significance: "Publication of the work",
+        event_type: "publication",
+        impact_level: 5
+      }],
+      
+      // Add source files
+      source_files: [],
+      
+      // Add technical metadata
       last_updated: new Date(),
       version: '1.0',
-      source_files: []
-    };
+      
+      // Store the original metadata in a custom field
+      book_metadata: {
+        author: metadata.author,
+        publication_year: metadata.publication_year,
+        publisher: metadata.publisher,
+        description: metadata.description,
+        genre: metadata.genre
+      }
 
     // Check if metadata already exists
-    const existing = await collection.findOne({ type: 'book_metadata' });
+    const existing = await collection.findOne({ type: 'preface' });
     if (existing) {
       await collection.updateOne(
-        { type: 'book_metadata' },
+        { type: 'preface' },
         { $set: document }
       );
       console.log('\n✅ Updated existing book metadata');
