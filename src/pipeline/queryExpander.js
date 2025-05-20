@@ -4,25 +4,16 @@ require('dotenv').config();
 
 /**
  * Generate semantically similar queries to improve retrieval
- * @param {Object} queryInfo - Classified query information
+ * @param {string} query - Original query string
  * @param {number} branchCount - Number of branch queries to generate
  * @returns {Promise<Array>} Array of expanded queries
  */
-async function expandQuery(queryInfo, branchCount = 3) {
+async function expandQuery(query, branchCount = 3) {
   try {
-    const { original_query, people, locations, time_periods, topics, query_type } = queryInfo;
-    
     const prompt = `
     Generate ${branchCount} semantically similar but distinct queries based on this original query:
     
-    Original query: "${original_query}"
-    
-    Context information:
-    - People mentioned: ${people.join(', ') || 'None'}
-    - Locations: ${locations.join(', ') || 'None'}
-    - Time periods: ${time_periods.join(', ') || 'None'}
-    - Topics: ${topics.join(', ') || 'None'}
-    - Query type: ${query_type}
+    Original query: "${query}"
     
     For each alternative query:
     1. Rephrase the question to focus on a different aspect of the same topic
@@ -40,24 +31,16 @@ async function expandQuery(queryInfo, branchCount = 3) {
     });
     
     logger.info('Query expanded:', { 
-      original: original_query,
+      original: query,
       expanded_count: result.expanded_queries.length
     });
     
-    return {
-      original_query: original_query,
-      expanded_queries: result.expanded_queries,
-      reasoning: result.reasoning
-    };
+    return result.expanded_queries;
   } catch (error) {
     logger.error('Error expanding query:', error);
     
-    // Return original query on error
-    return {
-      original_query: queryInfo.original_query,
-      expanded_queries: [],
-      reasoning: 'Failed to generate expanded queries due to an error.'
-    };
+    // Return empty array on error
+    return [];
   }
 }
 
