@@ -149,8 +149,8 @@ async function buildAndSaveRelationshipMaps(projectId) {
         }
 
         // Create output directory structure
-        const outputDir = path.join(process.cwd(), 'ingest', projectId);
-        const relationshipsDir = path.join(outputDir, 'relationships');
+        const projectDir = path.join(process.cwd(), 'ingest', projectId);
+        const relationshipsDir = path.join(projectDir, 'relationships');
         await fs.mkdir(relationshipsDir, { recursive: true });
         logger.info(`Created relationships directory: ${relationshipsDir}`);
 
@@ -181,7 +181,7 @@ async function buildAndSaveRelationshipMaps(projectId) {
             JSON.stringify(relationshipMaps, null, 2)
         );
         
-        logger.info(`Successfully saved relationship maps for project ${projectId} to ${outputDir}`);
+        logger.info(`Successfully saved relationship maps for project ${projectId} to ${relationshipsDir}`);
         return relationshipMaps;
     } catch (error) {
         logger.error('Error building relationship maps:', error);
