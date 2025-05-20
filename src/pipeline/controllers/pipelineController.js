@@ -89,23 +89,43 @@ class PipelineController {
    * @returns {Promise<Object>} Quick answer
    */
   async generateQuickAnswer(query, classification) {
+    // Do a quick RAG search first
+    const quickSearchResults = await this.queryRouter.routeQuery({
+      ...classification,
+      complexity: 3, // Force simpler search
+      context_needed: [], // Skip context gathering
+      thinking_depth: 1
+    });
+
+    // Get the most relevant chunk
+    const topResult = quickSearchResults.primary[0] || {};
+    const supportingResult = quickSearchResults.supporting[0] || {};
+
     const prompt = `
-    Provide a quick initial response to this book-related question:
-    "${query}"
+    Provide a quick initial response to this book-related question using ONLY the provided context.
+    If you cannot answer confidently from this context, say so and mention that a more thorough search is needed.
+
+    Question: "${query}"
+
+    Available Context:
+    Primary Source: ${topResult.content || 'No direct match found'}
+    Supporting Info: ${supportingResult.content || 'No supporting information yet'}
 
     Query Type: ${classification.primary_type}
     Complexity: ${classification.complexity}
 
     Requirements:
-    1. Focus ONLY on the book's content
+    1. Use ONLY the provided context
     2. Be clear this is an initial response
     3. Keep it concise but informative
-    4. Mention that more detailed analysis is coming
+    4. If context is insufficient, say so
+    5. Mention that more detailed analysis is coming
 
     Format as JSON with:
     - initial_answer: 1-2 paragraph response
-    - confidence: 0-1 score
+    - confidence: 0-1 score (based on context relevance)
     - expects_enhancement: true/false based on query complexity
+    - context_sufficient: true/false
     `;
 
     return await generateStructuredResponse(prompt, {
@@ -141,12 +161,30 @@ class PipelineController {
       }
 
       // Step 2: Route query to appropriate search strategies
-      const searchResults = await this.queryRouter.routeQuery({
+      // Use the quick search results we already have and expand from there
+      const quickResults = await this.queryRouter.routeQuery({
+        ...classification,
+        complexity: 3,
+        context_needed: [],
+        thinking_depth: 1
+      });
+
+      // Now get additional results based on thinking depth
+      const fullResults = await this.queryRouter.routeQuery({
         ...classification,
         original_query: query,
         expanded_query: expandedQuery,
-        thinking_depth: thinkingDepth
+        thinking_depth: thinkingDepth,
+        exclude_ids: quickResults.primary.map(r => r.id) // Avoid re-fetching
       });
+
+      // Merge results
+      const searchResults = {
+        primary: [...quickResults.primary, ...fullResults.primary],
+        supporting: [...quickResults.supporting, ...fullResults.supporting],
+        context: fullResults.context // Context is only in full results
+      };
+
       await this.responseManager.addBackgroundUpdate(requestId, {
         stage: 'search_complete',
         result_counts: {
@@ -181,7 +219,8 @@ class PipelineController {
           classification,
           expanded_query: expandedQuery,
           synthesized,
-          thinking_depth: thinkingDepth
+          thinking_depth: thinkingDepth,
+          previous_answer: quickResults.primary[0]?.content // Include previous answer for consistency
         }
       );
 
@@ -296,6 +335,8 @@ class PipelineController {
     - Complexity: ${classification.complexity}
     - Requires Inference: ${classification.requires_inference}
     
+    Previous Quick Answer: ${context.previous_answer || 'None provided'}
+
     ${typeInstructions[classification.primary_type] || ''}
 
     Available Information:
@@ -306,6 +347,19 @@ class PipelineController {
     - Evidence Types Needed: ${classification.evidence_type.join(', ')}
     - Structure: ${classification.structure_preference}
 
+    Critical Instructions:
+    1. Use ONLY the provided information to construct your answer
+    2. If a quick answer was provided:
+       - Maintain consistency with accurate parts
+       - Expand on correct points with evidence
+       - Correct any inaccuracies, explaining why
+    3. If information contradicts the quick answer:
+       - Acknowledge the correction
+       - Explain why the new information is more accurate
+    4. If quick answer was off-topic:
+       - Redirect to book-specific content
+       - Use evidence to support the redirection
+
     Format your response as a JSON object with:
     - answer: Main answer (${classification.detail_level === 'comprehensive' ? '3-4' : '1-2'} paragraphs)
     - key_points: Array of ${classification.complexity >= 7 ? '5-7' : '3-5'} most important points
@@ -313,6 +367,8 @@ class PipelineController {
     - analysis: Object containing type-specific analysis based on query type
     - confidence: Number between 0-1 indicating confidence
     - follow_up: Array of 2-3 suggested follow-up questions
+    - corrections: Array of corrections to quick answer (if any)
+    - consistency_notes: String explaining how this answer relates to quick answer
     `;
 
     return await generateStructuredResponse(prompt, {
