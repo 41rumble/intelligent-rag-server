@@ -113,6 +113,10 @@ async function storeMetadata(projectId, metadata) {
     }
   } catch (error) {
     console.error('Failed to store metadata:', error);
+    if (error.errInfo?.details?.schemaRulesNotSatisfied) {
+      console.error('\nSchema validation details:');
+      console.error(JSON.stringify(error.errInfo.details.schemaRulesNotSatisfied, null, 2));
+    }
     throw error;
   }
 }
