@@ -17,13 +17,6 @@ class PipelineController {
     this.queryExpander = new QueryExpander();
     this.queryRouter = new QueryRouter(projectId);
     this.infoSynthesizer = new InfoSynthesizer();
-    this.responseManager = new ResponseManager();
-
-    // Set up response manager event handling
-    this.responseManager.on('update', (requestId, update) => {
-      // This will be connected to the WebSocket/SSE handler
-      logger.debug('Response update:', { requestId, type: update.type });
-    });
   }
 
   /**
@@ -33,9 +26,6 @@ class PipelineController {
    * @returns {Promise<Object>} Processed result
    */
   async process(query, thinkingDepth = 1) {
-    const requestId = uuidv4();
-    const responseController = this.responseManager.initializeStream(requestId);
-
     try {
       logger.info(`Processing query at thinking depth ${thinkingDepth}: ${query}`);
 
@@ -53,153 +43,18 @@ class PipelineController {
         complexity: classification.complexity
       });
 
-      // Step 3: Get quick initial answer
-      const quickAnswer = await this.generateQuickAnswer(query, classification);
-      await this.responseManager.streamInitialAnswer(requestId, quickAnswer);
-
-      // Start background processing
-      this.processInBackground(requestId, query, classification, thinkingDepth).catch(error => {
-        logger.error('Background processing error:', error);
-        this.responseManager.handleError(requestId, error);
-      });
-
-      return {
-        requestId,
-        initial_answer: quickAnswer,
-        metadata: {
-          classification: {
-            primary_type: classification.primary_type,
-            complexity: classification.complexity
-          },
-          status: 'processing'
-        }
-      };
-
-    } catch (error) {
-      logger.error('Error in pipeline processing:', error);
-      this.responseManager.handleError(requestId, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Generate a quick initial answer
-   * @param {string} query - Original query
-   * @param {Object} classification - Query classification
-   * @returns {Promise<Object>} Quick answer
-   */
-  async generateQuickAnswer(query, classification) {
-    // Do a quick RAG search first
-    const quickSearchResults = await this.queryRouter.routeQuery({
-      ...classification,
-      complexity: 3, // Force simpler search
-      context_needed: [], // Skip context gathering
-      thinking_depth: 1
-    });
-
-    // Get the most relevant chunk
-    const topResult = quickSearchResults.primary[0] || {};
-    const supportingResult = quickSearchResults.supporting[0] || {};
-
-    const prompt = `
-    Provide a quick initial response to this book-related question using ONLY the provided context.
-    If you cannot answer confidently from this context, say so and mention that a more thorough search is needed.
-
-    Question: "${query}"
-
-    Available Context:
-    Primary Source: ${topResult.content || 'No direct match found'}
-    Supporting Info: ${supportingResult.content || 'No supporting information yet'}
-
-    Query Type: ${classification.primary_type}
-    Complexity: ${classification.complexity}
-
-    Requirements:
-    1. Use ONLY the provided context
-    2. Be clear this is an initial response
-    3. Keep it concise but informative
-    4. If context is insufficient, say so
-    5. Mention that more detailed analysis is coming
-
-    Format as JSON with:
-    - initial_answer: 1-2 paragraph response
-    - confidence: 0-1 score (based on context relevance)
-    - expects_enhancement: true/false based on query complexity
-    - context_sufficient: true/false
-    `;
-
-    return await generateStructuredResponse(prompt, {
-      temperature: 0.3,
-      maxTokens: 250
-    });
-  }
-
-  /**
-   * Process query in background for enhanced response
-   * @param {string} requestId - Request identifier
-   * @param {string} query - Original query
-   * @param {Object} classification - Query classification
-   * @param {number} thinkingDepth - Processing depth
-   */
-  async processInBackground(requestId, query, classification, thinkingDepth) {
-    try {
-      // Check if we should continue processing
-      if (this.responseManager.shouldTerminate(requestId)) {
-        return;
-      }
-
-      // Step 1: Expand query based on classification
+      // Step 3: Process through RAG pipeline
       const expandedQuery = await this.queryExpander.expandQuery(query, classification);
-      await this.responseManager.addBackgroundUpdate(requestId, {
-        stage: 'query_expansion',
-        expanded: expandedQuery
-      });
 
-      // Check processing time
-      if (this.responseManager.shouldTerminate(requestId)) {
-        return;
-      }
-
-      // Step 2: Route query to appropriate search strategies
-      // Use the quick search results we already have and expand from there
-      const quickResults = await this.queryRouter.routeQuery({
-        ...classification,
-        complexity: 3,
-        context_needed: [],
-        thinking_depth: 1
-      });
-
-      // Now get additional results based on thinking depth
-      const fullResults = await this.queryRouter.routeQuery({
+      // Step 4: Get search results
+      const searchResults = await this.queryRouter.routeQuery({
         ...classification,
         original_query: query,
         expanded_query: expandedQuery,
-        thinking_depth: thinkingDepth,
-        exclude_ids: quickResults.primary.map(r => r.id) // Avoid re-fetching
+        thinking_depth: thinkingDepth
       });
 
-      // Merge results
-      const searchResults = {
-        primary: [...quickResults.primary, ...fullResults.primary],
-        supporting: [...quickResults.supporting, ...fullResults.supporting],
-        context: fullResults.context // Context is only in full results
-      };
-
-      await this.responseManager.addBackgroundUpdate(requestId, {
-        stage: 'search_complete',
-        result_counts: {
-          primary: searchResults.primary.length,
-          supporting: searchResults.supporting.length,
-          context: searchResults.context.length
-        }
-      });
-
-      // Check processing time
-      if (this.responseManager.shouldTerminate(requestId)) {
-        return;
-      }
-
-      // Step 3: Synthesize information based on query type
+      // Step 5: Synthesize information
       const synthesized = await this.infoSynthesizer.synthesize(
         {
           primary: searchResults.primary,
@@ -212,21 +67,19 @@ class PipelineController {
         }
       );
 
-      // Step 4: Generate enhanced final answer
-      const enhancedAnswer = await this.generateAnswer(
+      // Step 6: Generate answer using RAG context
+      const answer = await this.generateAnswer(
         query,
         {
           classification,
           expanded_query: expandedQuery,
           synthesized,
-          thinking_depth: thinkingDepth,
-          previous_answer: quickResults.primary[0]?.content // Include previous answer for consistency
+          thinking_depth: thinkingDepth
         }
       );
 
-      // Finalize response
-      await this.responseManager.finalizeResponse(requestId, {
-        answer: enhancedAnswer,
+      return {
+        answer,
         supporting_info: synthesized,
         metadata: {
           classification: {
@@ -245,13 +98,15 @@ class PipelineController {
             context: searchResults.context.length
           }
         }
-      });
+      };
 
     } catch (error) {
-      logger.error('Error in background processing:', error);
-      this.responseManager.handleError(requestId, error);
+      logger.error('Error in pipeline processing:', error);
+      throw error;
     }
   }
+
+
 
   /**
    * Generate final answer using LLM
@@ -328,14 +183,13 @@ class PipelineController {
     };
 
     const prompt = `
-    Analyze and answer this question about the book: "${originalQuery}"
+    Analyze and answer this question about the book using ONLY the provided RAG context:
+    "${originalQuery}"
 
     Query Classification:
     - Type: ${classification.primary_type}
     - Complexity: ${classification.complexity}
     - Requires Inference: ${classification.requires_inference}
-    
-    Previous Quick Answer: ${context.previous_answer || 'None provided'}
 
     ${typeInstructions[classification.primary_type] || ''}
 
@@ -348,27 +202,22 @@ class PipelineController {
     - Structure: ${classification.structure_preference}
 
     Critical Instructions:
-    1. Use ONLY the provided information to construct your answer
-    2. If a quick answer was provided:
-       - Maintain consistency with accurate parts
-       - Expand on correct points with evidence
-       - Correct any inaccuracies, explaining why
-    3. If information contradicts the quick answer:
-       - Acknowledge the correction
-       - Explain why the new information is more accurate
-    4. If quick answer was off-topic:
-       - Redirect to book-specific content
-       - Use evidence to support the redirection
+    1. Use ONLY the provided RAG context to construct your answer
+    2. Do not use any external knowledge or assumptions
+    3. If the context is insufficient:
+       - State what specific information is missing
+       - Explain what would be needed to answer fully
+    4. Focus solely on this book's content
+    5. Use direct evidence from the context
 
     Format your response as a JSON object with:
     - answer: Main answer (${classification.detail_level === 'comprehensive' ? '3-4' : '1-2'} paragraphs)
     - key_points: Array of ${classification.complexity >= 7 ? '5-7' : '3-5'} most important points
     - evidence: Array of specific evidence used (quotes, events, etc.)
     - analysis: Object containing type-specific analysis based on query type
-    - confidence: Number between 0-1 indicating confidence
-    - follow_up: Array of 2-3 suggested follow-up questions
-    - corrections: Array of corrections to quick answer (if any)
-    - consistency_notes: String explaining how this answer relates to quick answer
+    - confidence: Number between 0-1 indicating confidence in RAG context coverage
+    - follow_up: Array of 2-3 suggested follow-up questions about this book
+    - missing_context: Array of specific information gaps in the RAG context
     `;
 
     return await generateStructuredResponse(prompt, {
