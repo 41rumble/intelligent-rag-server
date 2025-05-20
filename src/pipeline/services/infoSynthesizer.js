@@ -179,7 +179,8 @@ class InfoSynthesizer {
    */
   async generateSummary(synthesizedInfo) {
     const prompt = `
-    Analyze this information and create a structured summary:
+    Analyze this project-specific information and create a structured summary.
+    CRITICAL: Use ONLY the provided information from THIS project/book.
 
     Key Points:
     ${synthesizedInfo.keyPoints.join('\n')}
@@ -194,11 +195,20 @@ class InfoSynthesizer {
       `${r.entities.join(' & ')}: ${r.descriptions.join('; ')}`
     ).join('\n')}
 
+    IMPORTANT RULES:
+    1. Use ONLY the information provided above
+    2. Do not reference external sources or general knowledge
+    3. Keep all analysis specific to this project/book
+    4. If information seems insufficient, indicate gaps rather than filling with assumptions
+    5. Focus on connections and patterns within THIS content only
+
     Format your response as a JSON object with:
-    - summary: Brief overview of the main points
-    - key_findings: Array of important discoveries
-    - implications: What these events mean in broader context
+    - summary: Brief overview of the main points (project-specific)
+    - key_findings: Array of important discoveries from THIS content
+    - implications: What these events mean in THIS project's context
     - confidence: Number between 0-1 indicating confidence in conclusions
+    - information_gaps: Array of missing information that would help analysis
+    - project_specific_notes: Any special considerations about this content
     `;
 
     return await generateStructuredResponse(prompt, {

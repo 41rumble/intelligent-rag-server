@@ -16,7 +16,20 @@ class QueryRouter {
    * @returns {Object} MongoDB query
    */
   buildMongoQuery(classification) {
-    const query = { $and: [{ project: this.projectId }] };
+    // Always start with project-specific context
+    const query = { 
+      $and: [
+        { project: this.projectId },
+        // Ensure we're only getting content from this project
+        { 
+          $or: [
+            { project_specific: true },
+            { source_project: this.projectId },
+            { context_project: this.projectId }
+          ]
+        }
+      ]
+    };
 
     // Add type-specific conditions
     switch (classification.primary_type) {
@@ -124,10 +137,18 @@ class QueryRouter {
    */
   buildVectorParams(classification) {
     return {
-      k: classification.complexity >= 8 ? 10 : 
-         classification.complexity >= 5 ? 7 : 5,
+      // Even at low thinking levels, get enough context
+      k: Math.max(
+        5, // minimum context
+        classification.complexity >= 8 ? 10 : 
+        classification.complexity >= 5 ? 7 : 5
+      ),
       
       filters: {
+        // Always filter by project
+        project: this.projectId,
+        project_specific: true,
+        
         // Add type-specific filters
         type: this.getRelevantTypes(classification),
         
@@ -142,7 +163,15 @@ class QueryRouter {
         })
       },
       
-      rerank_by: this.getRerankingStrategy(classification)
+      rerank_by: {
+        // Always prioritize project-specific content
+        ...this.getRerankingStrategy(classification),
+        field_weights: {
+          ...this.getRerankingStrategy(classification).field_weights,
+          'project_relevance': 2.0,
+          'content_specificity': 1.5
+        }
+      }
     };
   }
 
