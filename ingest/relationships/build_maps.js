@@ -82,18 +82,70 @@ async function buildAndSaveRelationshipMaps(projectId) {
             throw new Error('No chapters found');
         }
         
-        // Build all relationship types
-        logger.info('Starting to build relationships...');
-        logger.info('About to call buildCharacterRelationships...');
-        logger.info(`Processing relationships for ${bios.length} characters...`);
-        const relationships = await buildCharacterRelationships(bios, chapters);
-        logger.info('RECEIVED relationships array back from builder');
-        logger.info(`Built ${relationships.length} character relationships`);
-        logger.info('Relationships array received:', JSON.stringify({
-            count: relationships.length,
-            first_few: relationships.slice(0, 2)
-        }, null, 2));
+        // Create relationships directory early
+        const relationshipsDir = path.join(projectDir, 'relationships');
+        logger.info('Creating directory:', relationshipsDir);
+        await fs.mkdir(relationshipsDir, { recursive: true });
         
+        // Build and save relationships incrementally
+        logger.info('Starting to build relationships...');
+        const relationships = [];
+        
+        // Process each character pair and save immediately
+        for (let i = 0; i < bios.length; i++) {
+            for (let j = i + 1; j < bios.length; j++) {
+                const char1 = bios[i];
+                const char2 = bios[j];
+                
+                // Skip if they never appear in the same chapters
+                const sharedChapters = chapters.filter(ch =>
+                    ch.text.toLowerCase().includes(char1.name.toLowerCase()) &&
+                    ch.text.toLowerCase().includes(char2.name.toLowerCase())
+                );
+                
+                if (sharedChapters.length > 0) {
+                    try {
+                        // Build relationship
+                        logger.info(`Building relationship between ${char1.name} and ${char2.name}...`);
+                        const relationship = await buildDetailedRelationship(char1.name, char2.name, sharedChapters);
+                        
+                        if (relationship) {
+                            // Add explicit relationship data if it exists
+                            if (char1.relationships?.[char2.name]) {
+                                relationship.explicit_description = char1.relationships[char2.name];
+                            }
+                            if (char2.relationships?.[char1.name]) {
+                                relationship.reverse_description = char2.relationships[char1.name];
+                            }
+                            
+                            // Save relationship immediately
+                            const filename = `${char1.name}__${char2.name}.json`;
+                            const filePath = path.join(relationshipsDir, filename);
+                            await fs.writeFile(
+                                filePath,
+                                JSON.stringify(relationship, null, 2)
+                            );
+                            logger.info(`Saved relationship to ${filename}`);
+                            
+                            // Keep in memory only what we need for network analysis
+                            relationships.push({
+                                source_character: char1.name,
+                                target_character: char2.name,
+                                type: relationship.type,
+                                strength: relationship.strength
+                            });
+                        }
+                    } catch (error) {
+                        logger.error(`Error processing relationship between ${char1.name} and ${char2.name}:`, error);
+                        // Continue with next pair
+                    }
+                }
+            }
+        }
+        
+        logger.info(`Completed processing ${relationships.length} relationships`);
+        
+        // Build social networks with minimal relationship data
         const socialNetworks = await buildSocialNetworks(bios, chapters);
         logger.info(`Built ${socialNetworks.length} social networks`);
         
