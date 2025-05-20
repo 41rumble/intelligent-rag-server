@@ -147,10 +147,13 @@ async function buildAndSaveRelationshipMaps(projectId) {
                 )
             };
         }
-        // Create relationships directory
+
+        // Create output directory structure
+        const outputDir = path.join(process.cwd(), 'ingest', projectId);
         const relationshipsDir = path.join(outputDir, 'relationships');
         await fs.mkdir(relationshipsDir, { recursive: true });
         logger.info(`Created relationships directory: ${relationshipsDir}`);
+
         // Save each relationship as a separate file
         for (const [source, targets] of Object.entries(relationshipMaps.direct_relationships)) {
             for (const [target, data] of Object.entries(targets)) {
@@ -170,6 +173,14 @@ async function buildAndSaveRelationshipMaps(projectId) {
                 );
             }
         }
+
+        // Save the full relationship maps for reference
+        const fullMapsPath = path.join(relationshipsDir, 'full_maps.json');
+        await fs.writeFile(
+            fullMapsPath,
+            JSON.stringify(relationshipMaps, null, 2)
+        );
+        
         logger.info(`Successfully saved relationship maps for project ${projectId} to ${outputDir}`);
         return relationshipMaps;
     } catch (error) {
