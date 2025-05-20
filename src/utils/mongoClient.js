@@ -207,7 +207,8 @@ async function initializeCollection(projectId) {
               "theme_analysis",
               "location_description",
               "acknowledgement",
-              "preface"
+              "preface",
+              "book_metadata"
             ]
           },
           project: { bsonType: "string" },
