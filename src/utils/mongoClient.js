@@ -75,29 +75,107 @@ async function createTextIndexes(projectId) {
   
   if (!textIndexExists) {
     logger.info(`Creating text indexes for project_${projectId}`);
+    // Create text search index with field weights
     await collection.createIndex(
       { 
+        // Basic content
         text: "text",
         name: "text",
+        title: "text",
         tags: "text",
-        source_character: "text",
-        target_character: "text",
-        relationship_type: "text",
-        "key_moments.description": "text"
+
+        // Character fields
+        "character_data.character_arc.initial_state": "text",
+        "character_data.character_arc.final_state": "text",
+        "character_data.personality_traits.trait": "text",
+        "character_data.motivations.motivation": "text",
+
+        // Relationship fields
+        "relationship_data.source_character": "text",
+        "relationship_data.target_character": "text",
+        "relationship_data.relationship_type": "text",
+        "relationship_data.dynamics.power_balance": "text",
+        "relationship_data.dynamics.emotional_bond": "text",
+        "relationship_data.progression.change": "text",
+
+        // Event fields
+        "events.event": "text",
+        "events.significance": "text",
+        "events.affected_characters.impact": "text",
+
+        // Theme fields
+        "theme_data.themes.theme": "text",
+        "theme_data.themes.manifestation": "text",
+        "theme_data.symbols.symbol": "text",
+        "theme_data.symbols.meaning": "text",
+
+        // Location fields
+        "locations.location": "text",
+        "locations.description": "text",
+
+        // Chapter fields
+        "chapter_data.synopsis": "text",
+        "chapter_data.narrative_perspective": "text",
+        "chapter_data.mood": "text"
       },
       { 
         name: "text_search_index",
         weights: {
-          text: 1,
+          // Primary identifiers
           name: 10,
+          title: 10,
+          "relationship_data.source_character": 10,
+          "relationship_data.target_character": 10,
+          
+          // Key story elements
+          "theme_data.themes.theme": 8,
+          "theme_data.symbols.symbol": 8,
+          "events.event": 8,
+          
+          // Important metadata
+          "character_data.character_arc.arc_type": 7,
+          "relationship_data.relationship_type": 7,
+          "theme_data.themes.manifestation": 7,
+          
+          // Supporting content
+          "chapter_data.synopsis": 5,
           tags: 5,
-          source_character: 10,
-          target_character: 10,
-          relationship_type: 5,
-          "key_moments.description": 1
-        }
+          "locations.location": 5,
+          "events.significance": 5,
+          
+          // Detailed content
+          text: 3,
+          "locations.description": 3,
+          "character_data.personality_traits.trait": 3,
+          "relationship_data.progression.change": 3,
+          
+          // Additional context
+          "chapter_data.mood": 2,
+          "chapter_data.narrative_perspective": 2,
+          "theme_data.symbols.meaning": 2,
+          "events.affected_characters.impact": 2
+        },
+        default_language: "english"
       }
     );
+
+    // Create additional indexes for efficient querying
+    await collection.createIndex({ "timeline_data.story_day": 1 });
+    await collection.createIndex({ "timeline_data.relative_position": 1 });
+    await collection.createIndex({ "chapter_data.chapter_number": 1 });
+    await collection.createIndex({ 
+      "relationship_data.source_character": 1,
+      "relationship_data.target_character": 1,
+      type: 1
+    });
+    await collection.createIndex({ 
+      "theme_data.themes.theme": 1,
+      "theme_data.themes.strength": -1
+    });
+    await collection.createIndex({ 
+      type: 1,
+      "events.impact_level": -1
+    });
     logger.info(`Text indexes created for project_${projectId}`);
   }
 }
@@ -114,130 +192,268 @@ async function initializeCollection(projectId) {
   const schema = {
     validator: {
       $jsonSchema: {
-          bsonType: "object",
-          required: ["type", "project", "text"],
-          properties: {
-            type: {
-              bsonType: "string",
-              enum: ["chapter_synopsis", "bio", "acknowledgement", "preface", "chapter_text", "character_relationship"]
-            },
-            project: {
-              bsonType: "string"
-            },
-            name: {
-              bsonType: "string"
-            },
-            aliases: {
-              bsonType: "array",
-              items: {
-                bsonType: "string"
-              }
-            },
-            text: {
-              bsonType: "string"
-            },
-            full_text: {
-              bsonType: "string",
-              description: "Full chapter text when available"
-            },
-            synopsis: {
-              bsonType: "string",
-              description: "Chapter synopsis or summary"
-            },
-            tags: {
-              bsonType: "array",
-              items: {
-                bsonType: "string"
-              }
-            },
-            locations: {
-              bsonType: "array",
-              items: {
-                oneOf: [
-                  { bsonType: "string" },
-                  {
-                    bsonType: "object",
-                    required: ["location"],
-                    properties: {
-                      location: { bsonType: "string" },
-                      significance: { bsonType: "string" }
-                    }
+        bsonType: "object",
+        required: ["type", "project", "text"],
+        properties: {
+          // Basic metadata
+          type: {
+            bsonType: "string",
+            enum: [
+              "chapter_text",
+              "chapter_synopsis",
+              "character_bio",
+              "character_relationship",
+              "plot_event",
+              "theme_analysis",
+              "location_description",
+              "acknowledgement",
+              "preface"
+            ]
+          },
+          project: { bsonType: "string" },
+          text: { bsonType: "string" },
+          
+          // Document metadata
+          name: { bsonType: "string" },
+          title: { bsonType: "string" },
+          aliases: {
+            bsonType: "array",
+            items: { bsonType: "string" }
+          },
+          tags: {
+            bsonType: "array",
+            items: { bsonType: "string" }
+          },
+          
+          // Temporal information
+          timeline_data: {
+            bsonType: "object",
+            properties: {
+              date: { bsonType: "string" },
+              time_period: { bsonType: "string" },
+              relative_position: { bsonType: "double" }, // 0-1 position in story
+              story_day: { bsonType: "int" }, // Days since story start
+              temporal_references: {
+                bsonType: "array",
+                items: {
+                  bsonType: "object",
+                  properties: {
+                    reference_type: { bsonType: "string" }, // "flashback", "foreshadowing", etc.
+                    referenced_event: { bsonType: "string" },
+                    significance: { bsonType: "string" }
                   }
-                ]
-              }
-            },
-            events: {
-              bsonType: "array",
-              items: {
-                oneOf: [
-                  { bsonType: "string" },
-                  {
-                    bsonType: "object",
-                    required: ["event"],
-                    properties: {
-                      event: { bsonType: "string" },
-                      significance: { bsonType: "string" }
-                    }
-                  }
-                ]
-              }
-            },
-            time_period: {
-              bsonType: "string",
-              description: "Historical period (e.g., 'late 17th century', 'Restoration period', 'Tudor era')"
-            },
-            character_arc: {
-              bsonType: "string",
-              description: "Description of how the character develops through the story"
-            },
-            key_moments: {
-              bsonType: "array",
-              items: {
-                bsonType: "object",
-                required: ["chapter", "description"],
-                properties: {
-                  chapter: { bsonType: "string" },
-                  description: { bsonType: "string" }
                 }
               }
-            },
-            relationships: {
-              bsonType: "object",
-              patternProperties: {
-                ".*": { bsonType: "string" }
-              }
-            },
-            vector_id: {
-              bsonType: "string"
-            },
-            priority: {
-              bsonType: "int"
-            },
-            source_files: {
-              bsonType: "array",
-              items: {
-                bsonType: "string"
-              }
-            },
-            story_arc_position: {
-              bsonType: "string"
-            },
-            chapter_id: {
-              bsonType: "string",
-              description: "Identifier of the chapter this chunk belongs to"
-            },
-            chunk_index: {
-              bsonType: "int",
-              description: "Index of this chunk within the chapter"
-            },
-            total_chunks: {
-              bsonType: "int",
-              description: "Total number of chunks in the chapter"
             }
-          }
+          },
+
+          // Location information
+          locations: {
+            bsonType: "array",
+            items: {
+              bsonType: "object",
+              required: ["location"],
+              properties: {
+                location: { bsonType: "string" },
+                significance: { bsonType: "string" },
+                description: { bsonType: "string" },
+                connected_locations: {
+                  bsonType: "array",
+                  items: {
+                    bsonType: "object",
+                    properties: {
+                      location: { bsonType: "string" },
+                      relationship: { bsonType: "string" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+
+          // Event information
+          events: {
+            bsonType: "array",
+            items: {
+              bsonType: "object",
+              required: ["event"],
+              properties: {
+                event: { bsonType: "string" },
+                significance: { bsonType: "string" },
+                event_type: { bsonType: "string" }, // "plot_point", "character_development", etc.
+                impact_level: { bsonType: "int" }, // 1-5 scale
+                affected_characters: {
+                  bsonType: "array",
+                  items: {
+                    bsonType: "object",
+                    properties: {
+                      character: { bsonType: "string" },
+                      impact: { bsonType: "string" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+
+          // Character information
+          character_data: {
+            bsonType: "object",
+            properties: {
+              character_arc: {
+                bsonType: "object",
+                properties: {
+                  arc_type: { bsonType: "string" }, // "redemption", "fall", "growth", etc.
+                  initial_state: { bsonType: "string" },
+                  final_state: { bsonType: "string" },
+                  key_development_points: {
+                    bsonType: "array",
+                    items: {
+                      bsonType: "object",
+                      properties: {
+                        chapter: { bsonType: "string" },
+                        development: { bsonType: "string" },
+                        catalyst: { bsonType: "string" }
+                      }
+                    }
+                  }
+                }
+              },
+              personality_traits: {
+                bsonType: "array",
+                items: {
+                  bsonType: "object",
+                  properties: {
+                    trait: { bsonType: "string" },
+                    evidence: { bsonType: "array", items: { bsonType: "string" } }
+                  }
+                }
+              },
+              motivations: {
+                bsonType: "array",
+                items: {
+                  bsonType: "object",
+                  properties: {
+                    motivation: { bsonType: "string" },
+                    strength: { bsonType: "int" }, // 1-5 scale
+                    related_events: { bsonType: "array", items: { bsonType: "string" } }
+                  }
+                }
+              }
+            }
+          },
+
+          // Relationship information
+          relationship_data: {
+            bsonType: "object",
+            properties: {
+              source_character: { bsonType: "string" },
+              target_character: { bsonType: "string" },
+              relationship_type: { bsonType: "string" },
+              dynamics: {
+                bsonType: "object",
+                properties: {
+                  power_balance: { bsonType: "string" },
+                  emotional_bond: { bsonType: "string" },
+                  trust_level: { bsonType: "double" }, // 0-1 scale
+                  conflict_level: { bsonType: "double" } // 0-1 scale
+                }
+              },
+              progression: {
+                bsonType: "array",
+                items: {
+                  bsonType: "object",
+                  properties: {
+                    chapter: { bsonType: "string" },
+                    change: { bsonType: "string" },
+                    cause: { bsonType: "string" },
+                    impact: { bsonType: "string" }
+                  }
+                }
+              }
+            }
+          },
+
+          // Theme information
+          theme_data: {
+            bsonType: "object",
+            properties: {
+              themes: {
+                bsonType: "array",
+                items: {
+                  bsonType: "object",
+                  properties: {
+                    theme: { bsonType: "string" },
+                    manifestation: { bsonType: "string" },
+                    strength: { bsonType: "int" }, // 1-5 scale
+                    related_elements: {
+                      bsonType: "array",
+                      items: {
+                        bsonType: "object",
+                        properties: {
+                          element_type: { bsonType: "string" }, // "character", "event", "symbol"
+                          element: { bsonType: "string" },
+                          connection: { bsonType: "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              symbols: {
+                bsonType: "array",
+                items: {
+                  bsonType: "object",
+                  properties: {
+                    symbol: { bsonType: "string" },
+                    meaning: { bsonType: "string" },
+                    occurrences: {
+                      bsonType: "array",
+                      items: {
+                        bsonType: "object",
+                        properties: {
+                          chapter: { bsonType: "string" },
+                          context: { bsonType: "string" },
+                          significance: { bsonType: "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+
+          // Chapter-specific information
+          chapter_data: {
+            bsonType: "object",
+            properties: {
+              chapter_number: { bsonType: "int" },
+              chapter_id: { bsonType: "string" },
+              full_text: { bsonType: "string" },
+              synopsis: { bsonType: "string" },
+              narrative_perspective: { bsonType: "string" },
+              pacing: { bsonType: "string" },
+              mood: { bsonType: "string" },
+              story_arc_position: { bsonType: "string" },
+              chunk_index: { bsonType: "int" },
+              total_chunks: { bsonType: "int" }
+            }
+          },
+
+          // Technical metadata
+          vector_id: { bsonType: "string" },
+          priority: { bsonType: "int" },
+          source_files: {
+            bsonType: "array",
+            items: { bsonType: "string" }
+          },
+          last_updated: { bsonType: "date" },
+          version: { bsonType: "string" }
         }
       }
-    };
+    }
+  };
   
   // Check if collection exists
   const collections = await database.listCollections({ name: collectionName }).toArray();
