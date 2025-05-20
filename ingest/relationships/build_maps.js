@@ -136,6 +136,7 @@ async function buildAndSaveRelationshipMaps(projectId) {
         };
 
         // Process relationships into optimized maps
+        logger.info('Processing relationships into maps...');
         for (const rel of relationships) {
             if (!relationshipMaps.direct_relationships[rel.source_character]) {
                 relationshipMaps.direct_relationships[rel.source_character] = {};
@@ -156,6 +157,12 @@ async function buildAndSaveRelationshipMaps(projectId) {
             };
         }
 
+        logger.info('Finished processing relationships into maps');
+        
+        // About to start file operations
+        logger.info('About to start file operations');
+        logger.info('Project directory:', projectDir);
+        
         // Create relationships directory
         const relationshipsDir = path.join(projectDir, 'relationships');
         await fs.mkdir(relationshipsDir, { recursive: true });
