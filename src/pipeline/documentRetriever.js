@@ -73,8 +73,23 @@ async function metadataSearch(queryInfo, limit = 5) {
     const { project_id, people, locations, time_periods, topics } = queryInfo;
     const collection = await mongoClient.getProjectCollection(project_id);
     
+    // Get book metadata for time period context
+    const bookMetadata = await getBookMetadata(project_id);
+    
     // Build filter based on available metadata
     const filter = { project: project_id };
+    
+    // Add time period filter if available
+    if (bookMetadata?.time_period) {
+      filter.$or = [
+        { 'timeline_data.date': { $regex: bookMetadata.time_period.start, $options: 'i' } },
+        { 'timeline_data.date': { $regex: bookMetadata.time_period.end, $options: 'i' } },
+        { 'timeline_data.time_period': { 
+          $regex: `${bookMetadata.time_period.start}.*${bookMetadata.time_period.end}`, 
+          $options: 'i' 
+        } }
+      ];
+    }
     
     // Add tag filters if available
     const tagFilters = [
@@ -182,13 +197,33 @@ function combineResults(results) {
  * @param {number} limit - Maximum number of results
  * @returns {Promise<Array>} Retrieved documents
  */
+/**
+ * Get book metadata for a project
+ * @param {string} projectId - Project identifier
+ * @returns {Promise<Object>} Book metadata
+ */
+async function getBookMetadata(projectId) {
+  try {
+    const collection = await mongoClient.getProjectCollection(projectId);
+    const metadata = await collection.findOne({ type: 'book_metadata' });
+    return metadata;
+  } catch (error) {
+    logger.error('Error getting book metadata:', error);
+    return null;
+  }
+}
+
 async function retrieveDocuments(query, queryInfo, limit = 10) {
   try {
     const projectId = queryInfo.project_id;
     
+    // Get book metadata first
+    const bookMetadata = await getBookMetadata(projectId);
+    
     logger.info('Starting parallel document retrieval:', {
       query,
       project_id: projectId,
+      book_title: bookMetadata?.title,
       search_types: ['vector', 'metadata', 'text']
     });
 
@@ -214,6 +249,20 @@ async function retrieveDocuments(query, queryInfo, limit = 10) {
       metadataResults,
       textResults
     ]);
+    
+    // Add book metadata to results if available
+    if (bookMetadata) {
+      const bookContext = {
+        book_title: bookMetadata.title,
+        book_author: bookMetadata.author,
+        time_period: bookMetadata.time_period,
+        publication_year: bookMetadata.publication_year
+      };
+      
+      combinedResults.forEach(doc => {
+        doc.book_context = bookContext;
+      });
+    }
     
     // Limit to requested number
     const finalResults = combinedResults.slice(0, limit);
