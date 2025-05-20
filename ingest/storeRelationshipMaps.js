@@ -120,7 +120,11 @@ async function processRelationshipMaps() {
     if (!indexes.some(index => index.name === 'character_relationship_index')) {
       await collection.createIndex(
         { source_character: 1, target_character: 1 },
-        { name: 'character_relationship_index', unique: true }
+        { 
+          name: 'character_relationship_index', 
+          unique: true,
+          partialFilterExpression: { type: 'character_relationship' }
+        }
       );
       logger.info('Created character relationship index');
     }
