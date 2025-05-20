@@ -168,6 +168,10 @@ async function buildCharacterRelationships(bios, chapters) {
   }
 
   logger.info(`Built ${relationships.length} character relationships`);
+  logger.info('Relationship array structure:', JSON.stringify({
+    count: relationships.length,
+    first_few: relationships.slice(0, 2)
+  }, null, 2));
   return relationships;
 }
 
