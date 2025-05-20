@@ -10,7 +10,7 @@ const projectId = process.argv[2] || 'the_great_fire';
 
 // Paths
 const projectPath = path.join(__dirname, projectId);
-const relationshipMapsPath = path.join(projectPath, 'relationship_maps');
+const relationshipsPath = path.join(projectPath, 'relationships');
 
 /**
  * Process and store relationship maps
@@ -20,14 +20,14 @@ async function processRelationshipMaps() {
   try {
     const collection = await mongoClient.getProjectCollection(projectId);
     
-    // Get all relationship map files
-    const mapFiles = await fs.readdir(relationshipMapsPath);
-    logger.info(`Found ${mapFiles.length} relationship maps to process`);
+    // Get all relationship files
+    const mapFiles = await fs.readdir(relationshipsPath);
+    logger.info(`Found ${mapFiles.length} relationships to process`);
     
     for (const file of mapFiles) {
       if (!file.endsWith('.json')) continue;
       
-      const filePath = path.join(relationshipMapsPath, file);
+      const filePath = path.join(relationshipsPath, file);
       const mapData = JSON.parse(await fs.readFile(filePath, 'utf8'));
       
       // Validate and transform relationship map data
