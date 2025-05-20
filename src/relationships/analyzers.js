@@ -38,37 +38,73 @@ function inferRelationshipType(interactions) {
  * @returns {Object} Strength analysis
  */
 function calculateRelationshipStrength(interactions, coOccurrences) {
-  let totalScore = 0;
-  let totalWeight = 0;
+  // Calculate base strength from interaction count
+  const baseStrength = Math.min(1, Math.log2(interactions.length + 1) / 4);
   
-  // Score from direct interactions
+  // Calculate average sentiment and significance
+  let totalSentiment = 0;
+  let totalSignificance = 0;
+  let totalThemes = new Set();
+  let totalQuotes = [];
+  
+  const significanceScores = {
+    'high': 1,
+    'medium': 0.6,
+    'low': 0.3
+  };
+  
   for (const interaction of interactions) {
-    const weight = interaction.weight || 1;
-    const emotionMod = interaction.emotion?.weight || 1;
-    const intensityMod = interaction.intensity?.weight || 1;
-    const significanceMod = interaction.significance?.weight || 1;
+    totalSentiment += Math.abs(interaction.interaction.sentiment || 0);
+    totalSignificance += significanceScores[interaction.interaction.significance] || 0.3;
     
-    // Combine modifiers
-    const finalWeight = weight * emotionMod * intensityMod * significanceMod;
-    
-    totalScore += finalWeight;
-    totalWeight += 1;
+    if (interaction.interaction.themes) {
+      interaction.interaction.themes.forEach(theme => totalThemes.add(theme));
+    }
+    if (interaction.interaction.quotes) {
+      totalQuotes.push(...interaction.interaction.quotes);
+    }
   }
   
-  // Add co-occurrence influence
-  if (coOccurrences) {
-    totalScore += coOccurrences.proximity_score * 0.5; // Weight co-occurrences less than direct interactions
-    totalWeight += 0.5;
-  }
+  const avgSentiment = interactions.length > 0 ? totalSentiment / interactions.length : 0;
+  const avgSignificance = interactions.length > 0 ? totalSignificance / interactions.length : 0;
   
-  const averageScore = totalWeight > 0 ? totalScore / totalWeight : 0;
+  // Calculate co-occurrence score
+  const coOccurrenceScore = coOccurrences ? 
+    Math.min(1, coOccurrences.total_scenes / 10) : 0;
+  
+  // Combine scores
+  const score = (baseStrength + avgSentiment + avgSignificance + coOccurrenceScore) / 4;
+  
+  // Calculate confidence based on interaction count and consistency
+  const sentiments = interactions.map(i => i.interaction.sentiment || 0);
+  const sentimentVariance = calculateVariance(sentiments);
+  const confidence = Math.min(
+    1, 
+    (0.5 + Math.log2(interactions.length + 1) / 4) * (1 - sentimentVariance)
+  );
   
   return {
-    score: averageScore,
-    confidence: calculateConfidence(interactions.length, coOccurrences),
+    score,
+    confidence,
     interaction_count: interactions.length,
-    co_occurrence_score: coOccurrences?.proximity_score || 0
+    co_occurrence_score: coOccurrenceScore,
+    components: {
+      base_strength: baseStrength,
+      avg_sentiment: avgSentiment,
+      avg_significance: avgSignificance,
+      sentiment_variance: sentimentVariance,
+      unique_themes: Array.from(totalThemes),
+      key_quotes: totalQuotes.slice(0, 5) // Keep top 5 quotes
+    }
   };
+}
+
+function calculateVariance(numbers) {
+  if (numbers.length === 0) return 0;
+  const mean = numbers.reduce((a, b) => a + b, 0) / numbers.length;
+  const squareDiffs = numbers.map(x => Math.pow(x - mean, 2));
+  const variance = squareDiffs.reduce((a, b) => a + b, 0) / numbers.length;
+  return Math.min(1, variance);
 }
 
 /**

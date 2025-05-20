@@ -12,25 +12,76 @@ async function findInteractions(char1, char2, chapters) {
   const timeline = [];
 
   for (const chapter of chapters) {
-    const text = chapter.text.toLowerCase();
+    const text = chapter.text;
     const char1Lower = char1.toLowerCase();
     const char2Lower = char2.toLowerCase();
 
     // Look for paragraphs where both characters appear
     const paragraphs = text.split('\n\n');
     
-    for (const paragraph of paragraphs) {
-      if (paragraph.includes(char1Lower) && paragraph.includes(char2Lower)) {
-        // Extract the interaction context
-        const context = extractInteractionContext(paragraph, char1Lower, char2Lower);
+    const relevantParagraphs = paragraphs.filter(p => 
+      p.toLowerCase().includes(char1Lower) && 
+      p.toLowerCase().includes(char2Lower)
+    );
+
+    if (relevantParagraphs.length > 0) {
+      // Analyze the interaction with Ollama
+      const prompt = `Analyze the interaction between ${char1} and ${char2} in this context:
+
+${relevantParagraphs.join('\n\n')}
+
+Provide:
+1. Type of interaction (direct conversation, indirect reference, shared action, etc)
+2. Sentiment (-1 to 1, where -1 is very negative, 0 is neutral, 1 is very positive)
+3. Brief description of what happened
+4. Notable quotes or key phrases that show their interaction
+5. Power dynamic in this interaction
+6. Themes present in this interaction
+7. Significance of this interaction (high/medium/low)
+
+Format as JSON with these fields:
+{
+  "interaction_type": string,
+  "sentiment": number,
+  "description": string,
+  "quotes": string[],
+  "power_dynamic": string,
+  "themes": string[],
+  "significance": string
+}`;
+
+      try {
+        const analysis = await generateStructuredResponse(prompt);
         
-        if (context) {
-          timeline.push({
-            chapter: chapter.chapter_id,
-            interaction: context,
-            significance: determineSignificance(context)
-          });
-        }
+        timeline.push({
+          chapter: chapter.chapter_id,
+          raw_text: relevantParagraphs.join('\n\n'),
+          interaction: {
+            type: analysis.interaction_type || 'co-occurrence',
+            sentiment: analysis.sentiment || 0,
+            description: analysis.description || 'Characters appear in same context',
+            quotes: analysis.quotes || [],
+            power_dynamic: analysis.power_dynamic || 'neutral',
+            themes: analysis.themes || [],
+            significance: analysis.significance || 'low'
+          }
+        });
+      } catch (error) {
+        logger.error('Error analyzing interaction:', error);
+        // Add basic interaction data even if analysis fails
+        timeline.push({
+          chapter: chapter.chapter_id,
+          raw_text: relevantParagraphs.join('\n\n'),
+          interaction: {
+            type: 'co-occurrence',
+            sentiment: 0,
+            description: 'Characters appear in same context',
+            quotes: [],
+            power_dynamic: 'neutral',
+            themes: [],
+            significance: 'low'
+          }
+        });
       }
     }
   }
