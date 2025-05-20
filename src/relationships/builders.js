@@ -138,23 +138,30 @@ async function buildCharacterRelationships(bios, chapters) {
         logger.info(`Analyzing relationship between ${char1.name} and ${char2.name}`);
         
         // Build detailed relationship
-        const relationship = await buildDetailedRelationship(
-          char1.name,
-          char2.name,
-          sharedChapters
-        );
-        
-        // Only process if we found a relationship
-        if (relationship) {
-          // Add explicit relationship data if it exists
-          if (char1.relationships?.[char2.name]) {
-            relationship.explicit_description = char1.relationships[char2.name];
-          }
-          if (char2.relationships?.[char1.name]) {
-            relationship.reverse_description = char2.relationships[char1.name];
-          }
+        try {
+          const relationship = await buildDetailedRelationship(
+            char1.name,
+            char2.name,
+            sharedChapters
+          );
           
-          relationships.push(relationship);
+          // Only process if we found a relationship
+          if (relationship) {
+            // Add explicit relationship data if it exists
+            if (char1.relationships?.[char2.name]) {
+              relationship.explicit_description = char1.relationships[char2.name];
+            }
+            if (char2.relationships?.[char1.name]) {
+              relationship.reverse_description = char2.relationships[char1.name];
+            }
+            
+            relationships.push(relationship);
+            logger.info(`Successfully added relationship between ${char1.name} and ${char2.name}`);
+          }
+        } catch (error) {
+          logger.error(`Error processing relationship between ${char1.name} and ${char2.name}: ${error.message}`);
+          // Continue with next pair instead of breaking the whole process
+          continue;
         }
       }
     }
