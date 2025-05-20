@@ -136,6 +136,9 @@ async function main() {
     // Add project ID
     metadata.project = projectId;
 
+    // Initialize collection with schema
+    await mongoClient.initializeCollection(projectId);
+    
     // Store in MongoDB
     await storeMetadata(projectId, metadata);
 
