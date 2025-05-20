@@ -115,30 +115,8 @@ async function processRelationshipMaps() {
     
     logger.info('All relationship maps processed successfully');
 
-    // Create indexes if they don't exist
+    // Create character relationship index if it doesn't exist
     const indexes = await collection.listIndexes().toArray();
-    
-    if (!indexes.some(index => index.name === 'relationship_search_index')) {
-      await collection.createIndex(
-        {
-          source_character: 'text',
-          target_character: 'text',
-          relationship_type: 'text',
-          'key_moments.description': 'text'
-        },
-        {
-          name: 'relationship_search_index',
-          weights: {
-            source_character: 10,
-            target_character: 10,
-            relationship_type: 5,
-            'key_moments.description': 1
-          }
-        }
-      );
-      logger.info('Created text search index for relationships');
-    }
-    
     if (!indexes.some(index => index.name === 'character_relationship_index')) {
       await collection.createIndex(
         { source_character: 1, target_character: 1 },

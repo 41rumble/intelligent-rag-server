@@ -79,14 +79,22 @@ async function createTextIndexes(projectId) {
       { 
         text: "text",
         name: "text",
-        tags: "text"
+        tags: "text",
+        source_character: "text",
+        target_character: "text",
+        relationship_type: "text",
+        "key_moments.description": "text"
       },
       { 
         name: "text_search_index",
         weights: {
           text: 1,
           name: 10,
-          tags: 5
+          tags: 5,
+          source_character: 10,
+          target_character: 10,
+          relationship_type: 5,
+          "key_moments.description": 1
         }
       }
     );
