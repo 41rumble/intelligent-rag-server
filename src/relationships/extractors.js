@@ -467,11 +467,17 @@ async function findInteractionGroups(characters, chapters) {
           
           if (sharedChapters.length > 0) {
             try {
-              const analysis = await analyzeRelationship(MODEL, 
-                sharedChapters.map(ch => ch.text).join('\n'),
-                char1.name,
-                char2.name
-              );
+              const prompt = `
+                Analyze the relationship between ${char1.name} and ${char2.name} in this text:
+                ${sharedChapters.map(ch => ch.text).join('\n')}
+                
+                Return ONLY valid JSON with this structure:
+                {
+                  "interaction_type": "friendly" | "hostile" | "professional" | "neutral" | "complex",
+                  "sentiment": <number between -1 and 1>
+                }`;
+              
+              const analysis = await generateStructuredResponse(prompt);
               interactions.set(key, {
                 type: analysis.interaction_type,
                 strength: analysis.sentiment
