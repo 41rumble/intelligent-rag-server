@@ -30,6 +30,12 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     
     ESSENTIAL POINTS:
     ${compressedKnowledge.key_points.map((point, i) => `${i + 1}. ${point}`).join('\n')}
+    
+    SOURCE SNIPPETS:
+    ${compressedKnowledge.source_snippets.map(snippet => 
+      `[${snippet.id}]: "${snippet.text}"
+       Relevance: ${snippet.relevance}`
+    ).join('\n\n')}
     `;
     
     // Add web search information if available
@@ -62,13 +68,20 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     
     1. Comprehensive and directly address the query
     2. Well-structured with clear organization
-    3. Factually accurate and based on the provided information
+    3. Factually accurate and based ONLY on the provided information
     4. Written in a natural, engaging style
-    5. Include citations to sources when appropriate
+    5. Include citations to sources using [source_id] format after each fact or quote
+    6. If information is missing or unclear, acknowledge the gaps
+    
+    CITATION INSTRUCTIONS:
+    - Use [source_id] format to cite sources
+    - Place citations immediately after the fact they support
+    - If multiple sources support a fact, include all: [source1][source2]
+    - If a fact isn't supported by the sources, acknowledge this
     
     ${context}
     
-    Provide a thoughtful, well-reasoned response to the query.
+    Provide a thoughtful, well-reasoned response to the query, being sure to cite your sources.
     `;
     
     logger.info('Final prompt built:', { 
