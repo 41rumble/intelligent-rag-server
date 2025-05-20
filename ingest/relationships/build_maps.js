@@ -83,10 +83,18 @@ async function buildAndSaveRelationshipMaps(projectId) {
         }
         
         // Build all relationship types
+        logger.info('Starting to build relationships...');
         const relationships = await buildCharacterRelationships(bios, chapters);
+        logger.info(`Built ${relationships.length} character relationships`);
+        
         const socialNetworks = await buildSocialNetworks(bios, chapters);
+        logger.info(`Built ${socialNetworks.length} social networks`);
+        
         const thematicConnections = await buildThematicConnections(bios, chapters);
+        logger.info(`Built ${thematicConnections.length} thematic connections`);
+        
         const eventNetworks = await buildEventNetworks(bios, chapters);
+        logger.info(`Built ${eventNetworks.length} event networks`);
         
         // Create optimized lookup maps
         const relationshipMaps = {
@@ -153,8 +161,13 @@ async function buildAndSaveRelationshipMaps(projectId) {
         await fs.mkdir(relationshipsDir, { recursive: true });
         logger.info(`Created relationships directory: ${relationshipsDir}`);
 
+        // Debug log relationship data
+        logger.info('Direct relationships object:', JSON.stringify(relationshipMaps.direct_relationships, null, 2));
+        logger.info('Starting to save individual relationship files...');
+
         // Save each relationship as a separate file
         for (const [source, targets] of Object.entries(relationshipMaps.direct_relationships)) {
+            logger.info(`Processing relationships for source: ${source} with targets:`, Object.keys(targets));
             for (const [target, data] of Object.entries(targets)) {
                 const filename = `${source}__${target}.json`;
                 const filePath = path.join(relationshipsDir, filename);
