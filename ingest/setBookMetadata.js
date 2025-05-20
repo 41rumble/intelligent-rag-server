@@ -50,16 +50,34 @@ async function storeMetadata(projectId, metadata) {
   try {
     const collection = await mongoClient.getProjectCollection(projectId);
     
+    // Prepare document that matches schema requirements
+    const document = {
+      type: 'book_metadata',
+      project: projectId,
+      text: `${metadata.title} by ${metadata.author}`, // Required by schema
+      title: metadata.title,
+      name: metadata.title,
+      timeline_data: {
+        time_period: `${metadata.time_period.start} to ${metadata.time_period.end}`
+      },
+      // Add other metadata fields
+      ...metadata,
+      // Add required technical metadata
+      last_updated: new Date(),
+      version: '1.0',
+      source_files: []
+    };
+
     // Check if metadata already exists
     const existing = await collection.findOne({ type: 'book_metadata' });
     if (existing) {
       await collection.updateOne(
         { type: 'book_metadata' },
-        { $set: metadata }
+        { $set: document }
       );
       console.log('\n✅ Updated existing book metadata');
     } else {
-      await collection.insertOne(metadata);
+      await collection.insertOne(document);
       console.log('\n✅ Stored new book metadata');
     }
   } catch (error) {
