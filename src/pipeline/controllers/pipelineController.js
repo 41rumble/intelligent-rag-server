@@ -1,6 +1,7 @@
 const logger = require('../../utils/logger');
+const { classifyQuery } = require('../queryClassifier');
 const QueryExpander = require('../services/queryExpander');
-const MultiSourceSearch = require('../services/multiSourceSearch');
+const QueryRouter = require('../services/queryRouter');
 const InfoSynthesizer = require('../services/infoSynthesizer');
 const { generateStructuredResponse } = require('../../utils/llmProvider');
 
@@ -11,7 +12,7 @@ class PipelineController {
   constructor(projectId) {
     this.projectId = projectId;
     this.queryExpander = new QueryExpander();
-    this.multiSourceSearch = new MultiSourceSearch(projectId);
+    this.queryRouter = new QueryRouter(projectId);
     this.infoSynthesizer = new InfoSynthesizer();
   }
 
@@ -25,50 +26,78 @@ class PipelineController {
     try {
       logger.info(`Processing query at thinking depth ${thinkingDepth}: ${query}`);
 
-      // Step 1: Expand query
-      const expandedQuery = await this.queryExpander.expandQuery(query);
+      // Step 1: Classify query
+      const classification = await classifyQuery(query, this.projectId);
+      logger.debug('Query classification:', {
+        type: classification.primary_type,
+        complexity: classification.complexity
+      });
+
+      // Step 2: Expand query based on classification
+      const expandedQuery = await this.queryExpander.expandQuery(query, classification);
       logger.debug('Expanded query:', expandedQuery);
 
-      // Step 2: Search across sources
-      const searchResults = await this.multiSourceSearch.search(
-        expandedQuery,
-        thinkingDepth
-      );
+      // Step 3: Route query to appropriate search strategies
+      const searchResults = await this.queryRouter.routeQuery({
+        ...classification,
+        original_query: query,
+        expanded_query: expandedQuery,
+        thinking_depth: thinkingDepth
+      });
       logger.debug('Search results:', {
-        rag: searchResults.rag.length,
-        db: searchResults.db.length,
-        web: searchResults.web.length
+        primary: searchResults.primary.length,
+        supporting: searchResults.supporting.length,
+        context: searchResults.context.length
       });
 
-      // Step 3: Synthesize information
+      // Step 4: Synthesize information based on query type
       const synthesized = await this.infoSynthesizer.synthesize(
-        searchResults,
-        thinkingDepth
+        {
+          primary: searchResults.primary,
+          supporting: searchResults.supporting,
+          context: searchResults.context
+        },
+        {
+          ...classification,
+          thinking_depth: thinkingDepth
+        }
       );
       logger.debug('Synthesized information:', {
-        keyPoints: synthesized.keyPoints.length,
-        timeline: synthesized.timeline.length,
-        relationships: synthesized.relationships.length
+        keyPoints: synthesized.keyPoints?.length || 0,
+        timeline: synthesized.timeline?.length || 0,
+        relationships: synthesized.relationships?.length || 0,
+        analysis: synthesized.analysis ? Object.keys(synthesized.analysis) : []
       });
 
-      // Step 4: Generate final answer
+      // Step 5: Generate final answer based on query type
       const answer = await this.generateAnswer(
         query,
-        expandedQuery,
-        synthesized,
-        thinkingDepth
+        {
+          classification,
+          expanded_query: expandedQuery,
+          synthesized,
+          thinking_depth: thinkingDepth
+        }
       );
 
       return {
         answer,
         supporting_info: synthesized,
         metadata: {
+          classification: {
+            primary_type: classification.primary_type,
+            secondary_types: classification.secondary_types,
+            complexity: classification.complexity,
+            requires_inference: classification.requires_inference
+          },
+          temporal_aspects: classification.temporal_aspects,
+          analysis_depth: classification.analysis_depth,
           thinking_depth: thinkingDepth,
           expanded_queries: expandedQuery,
           sources: {
-            rag: searchResults.rag.length,
-            db: searchResults.db.length,
-            web: searchResults.web.length
+            primary: searchResults.primary.length,
+            supporting: searchResults.supporting.length,
+            context: searchResults.context.length
           }
         }
       };
@@ -86,35 +115,96 @@ class PipelineController {
    * @param {number} thinkingDepth - Depth level
    * @returns {Promise<Object>} Generated answer
    */
-  async generateAnswer(originalQuery, expandedQuery, synthesized, thinkingDepth) {
+  async generateAnswer(originalQuery, context) {
+    const { classification, expanded_query, synthesized, thinking_depth } = context;
+
+    // Build type-specific prompt sections
+    const sections = [];
+
+    // Add synthesized information based on query type
+    if (synthesized.keyPoints?.length > 0) {
+      sections.push(`Key Points:\n${synthesized.keyPoints.join('\n')}`);
+    }
+
+    if (synthesized.timeline?.length > 0) {
+      sections.push(`Timeline:\n${synthesized.timeline.map(t => 
+        `${t.date}: ${t.events.join(', ')}`
+      ).join('\n')}`);
+    }
+
+    if (synthesized.relationships?.length > 0) {
+      sections.push(`Relationships:\n${synthesized.relationships.map(r =>
+        `${r.entities.join(' & ')}: ${r.descriptions.join('; ')}`
+      ).join('\n')}`);
+    }
+
+    if (synthesized.analysis) {
+      sections.push(`Analysis:\n${JSON.stringify(synthesized.analysis, null, 2)}`);
+    }
+
+    // Add query-type specific instructions
+    const typeInstructions = {
+      character_analysis: `
+        Focus on:
+        - Character development and arc
+        - Key personality traits and their evidence
+        - Significant relationships and their impact
+        - Motivations and their evolution
+      `,
+      relationship_analysis: `
+        Focus on:
+        - Relationship dynamics and their changes
+        - Key events that affected the relationship
+        - Power balance and emotional bonds
+        - Impact on both characters
+      `,
+      theme_analysis: `
+        Focus on:
+        - Theme manifestations throughout the story
+        - Supporting symbols and motifs
+        - Character and plot connections
+        - Thematic progression
+      `,
+      plot_analysis: `
+        Focus on:
+        - Event causality and consequences
+        - Character motivations and decisions
+        - Plot structure and pacing
+        - Significant turning points
+      `,
+      setting_analysis: `
+        Focus on:
+        - Setting details and atmosphere
+        - Symbolic significance
+        - Impact on characters and plot
+        - Changes over time
+      `
+    };
+
     const prompt = `
-    Answer this question: "${originalQuery}"
+    Analyze and answer this question about the book: "${originalQuery}"
 
-    Use the following information to provide a comprehensive answer:
+    Query Classification:
+    - Type: ${classification.primary_type}
+    - Complexity: ${classification.complexity}
+    - Requires Inference: ${classification.requires_inference}
+    
+    ${typeInstructions[classification.primary_type] || ''}
 
-    Key Points:
-    ${synthesized.keyPoints.join('\n')}
+    Available Information:
+    ${sections.join('\n\n')}
 
-    Timeline:
-    ${synthesized.timeline.map(t => 
-      `${t.date}: ${t.events.join(', ')}`
-    ).join('\n')}
-
-    Relationships:
-    ${synthesized.relationships.map(r =>
-      `${r.entities.join(' & ')}: ${r.descriptions.join('; ')}`
-    ).join('\n')}
-
-    ${synthesized.summary ? `
-    Summary:
-    ${JSON.stringify(synthesized.summary, null, 2)}
-    ` : ''}
+    Response Requirements:
+    - Detail Level: ${classification.detail_level}
+    - Evidence Types Needed: ${classification.evidence_type.join(', ')}
+    - Structure: ${classification.structure_preference}
 
     Format your response as a JSON object with:
-    - answer: Main answer to the question (2-3 paragraphs)
-    - key_points: Array of 3-5 most important points
-    - sources: Array of sources used (from the provided information)
-    - confidence: Number between 0-1 indicating confidence in the answer
+    - answer: Main answer (${classification.detail_level === 'comprehensive' ? '3-4' : '1-2'} paragraphs)
+    - key_points: Array of ${classification.complexity >= 7 ? '5-7' : '3-5'} most important points
+    - evidence: Array of specific evidence used (quotes, events, etc.)
+    - analysis: Object containing type-specific analysis based on query type
+    - confidence: Number between 0-1 indicating confidence
     - follow_up: Array of 2-3 suggested follow-up questions
     `;
 
