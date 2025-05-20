@@ -18,7 +18,8 @@ const relationshipsPath = path.join(projectPath, 'relationships');
  */
 async function processRelationshipMaps() {
   try {
-    const collection = await mongoClient.getProjectCollection(projectId);
+    // Use a separate collection for relationships
+    const collection = await mongoClient.getProjectCollection(`${projectId}_relationships`);
     
     // Get all relationship files
     const mapFiles = await fs.readdir(relationshipsPath);
@@ -154,8 +155,8 @@ async function processRelationshipMaps() {
  */
 async function main() {
   try {
-    // Initialize MongoDB collection with schema validation
-    await mongoClient.initializeCollection(projectId);
+    // We don't need schema validation for relationships collection
+    const collection = await mongoClient.getProjectCollection(`${projectId}_relationships`);
     
     // Process relationship maps
     await processRelationshipMaps();
