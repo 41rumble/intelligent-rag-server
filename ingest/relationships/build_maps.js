@@ -226,17 +226,6 @@ async function buildAndSaveRelationshipMaps(projectId) {
             first_few: relationships.slice(0, 2)
         }, null, 2));
         
-        // Create relationships directory
-        const relationshipsDir = path.join(projectDir, 'relationships');
-        logger.info('Creating directory:', relationshipsDir);
-        try {
-            await fs.mkdir(relationshipsDir, { recursive: true });
-            logger.info(`Successfully created relationships directory: ${relationshipsDir}`);
-        } catch (error) {
-            logger.error(`Error creating directory ${relationshipsDir}:`, error);
-            throw error;
-        }
-
         // Debug log relationship data
         logger.info('Direct relationships object:', JSON.stringify(relationshipMaps.direct_relationships, null, 2));
         logger.info('Starting to save individual relationship files...');
