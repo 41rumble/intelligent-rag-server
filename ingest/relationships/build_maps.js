@@ -85,7 +85,9 @@ async function buildAndSaveRelationshipMaps(projectId) {
         // Build all relationship types
         logger.info('Starting to build relationships...');
         logger.info('About to call buildCharacterRelationships...');
+        logger.info(`Processing relationships for ${bios.length} characters...`);
         const relationships = await buildCharacterRelationships(bios, chapters);
+        logger.info('RECEIVED relationships array back from builder');
         logger.info(`Built ${relationships.length} character relationships`);
         logger.info('Relationships array received:', JSON.stringify({
             count: relationships.length,

@@ -172,6 +172,7 @@ async function buildCharacterRelationships(bios, chapters) {
     count: relationships.length,
     first_few: relationships.slice(0, 2)
   }, null, 2));
+  logger.info('COMPLETED building ALL character relationships - returning array');
   return relationships;
 }
 
