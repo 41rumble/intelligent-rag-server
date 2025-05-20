@@ -65,18 +65,23 @@ async function storeMetadata(projectId, metadata) {
         time_period: `${metadata.time_period.start} to ${metadata.time_period.end}`
       },
       
-      // Add locations if any significant places are mentioned
+      // Add locations with required fields
       locations: [{
         location: "Book Setting",
-        description: `Time period from ${metadata.time_period.start} to ${metadata.time_period.end}`
+        description: `Time period from ${metadata.time_period.start} to ${metadata.time_period.end}`,
+        significance: "Primary setting of the work"
       }],
       
-      // Add basic event structure
+      // Add basic event structure with required fields
       events: [{
         event: "Book Publication",
         significance: "Publication of the work",
         event_type: "publication",
-        impact_level: 5
+        impact_level: 5,
+        affected_characters: [{
+          character: "Author",
+          impact: "Created the work"
+        }]
       }],
       
       // Add source files
