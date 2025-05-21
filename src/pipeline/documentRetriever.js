@@ -285,9 +285,75 @@ async function retrieveDocuments(query, queryInfo, limit = 10) {
   }
 }
 
+/**
+ * Search for biographical information about entities
+ * @param {Object} entities - Named entities from query
+ * @param {string} projectId - Project identifier
+ * @returns {Promise<Array>} Biographical documents
+ */
+async function bioSearch(entities, projectId) {
+  try {
+    const collection = await mongoClient.getProjectCollection(projectId);
+    const bioResults = [];
+
+    // Search for character bios
+    if (entities.people && entities.people.length > 0) {
+      const characterBios = await collection.find({
+        type: 'character_bio',
+        project: projectId,
+        $or: entities.people.map(name => ({
+          $or: [
+            { name: { $regex: name, $options: 'i' } },
+            { 'aliases': { $regex: name, $options: 'i' } }
+          ]
+        }))
+      }).toArray();
+      bioResults.push(...characterBios);
+    }
+
+    // Search for location descriptions
+    if (entities.places && entities.places.length > 0) {
+      const locationDocs = await collection.find({
+        type: 'location_description',
+        project: projectId,
+        $or: entities.places.map(place => ({
+          'location': { $regex: place, $options: 'i' }
+        }))
+      }).toArray();
+      bioResults.push(...locationDocs);
+    }
+
+    // Search for event descriptions
+    if (entities.events && entities.events.length > 0) {
+      const eventDocs = await collection.find({
+        type: 'plot_event',
+        project: projectId,
+        $or: entities.events.map(event => ({
+          'event': { $regex: event, $options: 'i' }
+        }))
+      }).toArray();
+      bioResults.push(...eventDocs);
+    }
+
+    logger.info('Bio search completed:', {
+      projectId,
+      people_count: entities.people?.length || 0,
+      places_count: entities.places?.length || 0,
+      events_count: entities.events?.length || 0,
+      results_count: bioResults.length
+    });
+
+    return bioResults;
+  } catch (error) {
+    logger.error('Error in bio search:', error);
+    return [];
+  }
+}
+
 module.exports = {
   retrieveDocuments,
   vectorSearch,
   metadataSearch,
-  textSearch
+  textSearch,
+  bioSearch
 };
