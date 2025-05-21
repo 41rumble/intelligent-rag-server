@@ -81,37 +81,92 @@ router.post('/', async (req, res) => {
       sources: processedContext.source_ids.length
     });
 
-    // Step 5: Generate final answer
+    // Step 5: Generate final answer with citations
     const finalPrompt = `
     QUERY: "${query}"
     PROJECT: "${projectId}"
 
     CONTEXT FROM DOCUMENTS:
-    ${processedContext.compressed_text}
+    ${processedContext.source_snippets.map(snippet => 
+      `[${snippet.id}] From ${snippet.source}:
+      "${snippet.text}"`
+    ).join('\n\n')}
 
     KEY POINTS:
-    ${processedContext.key_points.map(p => `- ${p}`).join('\n')}
+    ${processedContext.key_points.map((p, i) => `[KP${i+1}] ${p}`).join('\n')}
 
     ${webResults ? `
     ADDITIONAL CONTEXT FROM WEB:
-    ${webResults.summary}
+    ${webResults.source_urls.map((url, i) => 
+      `[WEB${i+1}] From ${url}:
+      "${webResults.summaries[i]}"`
+    ).join('\n\n')}
     ` : ''}
 
-    Based ONLY on the above context, provide a clear and concise answer to the query.
-    If the context doesn't contain enough information to fully answer the query, acknowledge what's missing.
-    Include references to sources when possible.
+    INSTRUCTIONS:
+    1. Based ONLY on the above context, provide a clear and concise answer
+    2. Use [source_id] citations after EVERY fact or quote
+    3. Format citations as [id1][id2] if multiple sources support a fact
+    4. If information is missing or unclear, acknowledge this
+    5. Structure the answer with clear paragraphs
+    6. End with a "Sources:" section listing all cited sources
+
+    Example format:
+    "Asa Jennings arrived in Smyrna in August 1922 [bio_12]. During the Great Fire, he worked with both Greek and Turkish authorities [doc_45][web_2] to coordinate evacuation efforts..."
+
+    Sources:
+    [bio_12] Character biography
+    [doc_45] Chapter 3 excerpt
+    [web_2] Historical article
     `;
 
     const answer = await generateFinalAnswer(finalPrompt);
     logger.info('Answer generated:', { length: answer.length });
 
-    // Send response
+    // Format source snippets for UI
+    const formattedSnippets = processedContext.source_snippets.map(snippet => ({
+      id: snippet.id,
+      text: snippet.text,
+      source: snippet.source,
+      relevance: snippet.relevance || 1.0,
+      metadata: {
+        type: snippet.type || 'text',
+        chapter: snippet.chapter || null,
+        page: snippet.page || null
+      }
+    }));
+
+    // Format web sources if available
+    const webSources = webResults ? webResults.source_urls.map(url => ({
+      id: `web_${url.replace(/[^a-zA-Z0-9]/g, '_')}`,
+      text: url,
+      source: 'web',
+      relevance: 1.0,
+      metadata: {
+        type: 'web',
+        url: url
+      }
+    })) : [];
+
+    // Send response with complete metadata
     return res.json({
       answer: answer.trim(),
-      source_snippets: processedContext.source_snippets || [],
+      source_snippets: [...formattedSnippets, ...webSources],
       metadata: {
         sources_used: processedContext.source_ids || [],
-        has_web_data: !!webResults
+        has_web_data: !!webResults,
+        query_info: {
+          original_query: query,
+          expanded_queries: expandedQueries,
+          project_id: projectId
+        },
+        context_stats: {
+          total_documents: allDocuments.length,
+          unique_documents: uniqueDocs.length,
+          web_sources: webResults?.source_urls?.length || 0,
+          key_points: processedContext.key_points.length
+        },
+        processing_complete: true
       }
     });
   } catch (error) {
