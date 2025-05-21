@@ -148,26 +148,96 @@ router.post('/', async (req, res) => {
       }
     })) : [];
 
-    // Send response with complete metadata
+    // Format response for logging
+    const responseLog = {
+      query,
+      projectId,
+      timestamp: new Date().toISOString(),
+      steps: [
+        {
+          step: 'retrieve_documents',
+          result: {
+            total_documents: allDocuments.length,
+            unique_documents: uniqueDocs.length,
+            document_ids: uniqueDocs.map(doc => doc._id)
+          }
+        },
+        {
+          step: 'web_search',
+          result: {
+            has_results: !!webResults,
+            summary_length: webResults?.summary?.length || 0,
+            source_urls: webResults?.source_urls || []
+          }
+        },
+        {
+          step: 'compress_knowledge',
+          result: {
+            compressed_length: processedContext.compressed_text.length,
+            key_points_count: processedContext.key_points.length,
+            source_ids: processedContext.source_ids
+          }
+        },
+        {
+          step: 'generate_answer',
+          result: {
+            prompt_length: finalPrompt.length,
+            answer_length: answer.length,
+            context_sources: processedContext.source_ids,
+            has_web_data: !!webResults
+          }
+        }
+      ]
+    };
+
+    // Format source snippets
+    const formattedSnippets = processedContext.source_snippets.map(snippet => ({
+      id: snippet.id,
+      text: snippet.text,
+      source: snippet.source,
+      relevance: snippet.relevance || 1.0,
+      metadata: {
+        type: snippet.type || 'text',
+        chapter: snippet.chapter || null,
+        page: snippet.page || null
+      }
+    }));
+
+    // Format web sources
+    const webSources = webResults ? webResults.source_urls.map(url => ({
+      id: `web_${url.replace(/[^a-zA-Z0-9]/g, '_')}`,
+      text: url,
+      source: 'web',
+      relevance: 1.0,
+      metadata: {
+        type: 'web',
+        url: url
+      }
+    })) : [];
+
+    // Log the formatted response
+    logger.info('\n=== Query Response ===\n' +
+      `Query: "${query}"\n\n` +
+      `Answer: ${answer}\n\n` +
+      '=== Source Snippets ===\n' +
+      [...formattedSnippets, ...webSources]
+        .map(snippet => 
+          `[${snippet.id}]\n` +
+          `Text: ${snippet.text}\n` +
+          `Relevance: ${snippet.relevance}\n`
+        ).join('\n') +
+      '\n=== Pipeline Steps ===\n' +
+      responseLog.steps
+        .map(step => 
+          `${step.step}:\n${JSON.stringify(step.result, null, 2)}\n`
+        ).join('\n')
+    );
+
+    // Return response
     return res.json({
       answer: answer.trim(),
       source_snippets: [...formattedSnippets, ...webSources],
-      metadata: {
-        sources_used: processedContext.source_ids || [],
-        has_web_data: !!webResults,
-        query_info: {
-          original_query: query,
-          expanded_queries: expandedQueries,
-          project_id: projectId
-        },
-        context_stats: {
-          total_documents: allDocuments.length,
-          unique_documents: uniqueDocs.length,
-          web_sources: webResults?.source_urls?.length || 0,
-          key_points: processedContext.key_points.length
-        },
-        processing_complete: true
-      }
+      log: responseLog
     });
   } catch (error) {
     logger.error('Error processing query:', error);
