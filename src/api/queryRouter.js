@@ -123,30 +123,9 @@ router.post('/', async (req, res) => {
     const answer = await generateFinalAnswer(finalPrompt);
     logger.info('Answer generated:', { length: answer.length });
 
-    // Format source snippets for UI
-    const formattedSnippets = processedContext.source_snippets.map(snippet => ({
-      id: snippet.id,
-      text: snippet.text,
-      source: snippet.source,
-      relevance: snippet.relevance || 1.0,
-      metadata: {
-        type: snippet.type || 'text',
-        chapter: snippet.chapter || null,
-        page: snippet.page || null
-      }
-    }));
-
-    // Format web sources if available
-    const webSources = webResults ? webResults.source_urls.map(url => ({
-      id: `web_${url.replace(/[^a-zA-Z0-9]/g, '_')}`,
-      text: url,
-      source: 'web',
-      relevance: 1.0,
-      metadata: {
-        type: 'web',
-        url: url
-      }
-    })) : [];
+    // Initialize empty arrays for snippets
+    let formattedSnippets = [];
+    let webSources = [];
 
     // Format response for logging
     const responseLog = {
@@ -191,7 +170,7 @@ router.post('/', async (req, res) => {
     };
 
     // Format source snippets
-    const formattedSnippets = processedContext.source_snippets.map(snippet => ({
+    formattedSnippets = processedContext.source_snippets.map(snippet => ({
       id: snippet.id,
       text: snippet.text,
       source: snippet.source,
@@ -204,7 +183,7 @@ router.post('/', async (req, res) => {
     }));
 
     // Format web sources
-    const webSources = webResults ? webResults.source_urls.map(url => ({
+    webSources = webResults ? webResults.source_urls.map(url => ({
       id: `web_${url.replace(/[^a-zA-Z0-9]/g, '_')}`,
       text: url,
       source: 'web',
