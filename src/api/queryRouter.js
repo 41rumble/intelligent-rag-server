@@ -111,15 +111,9 @@ router.post('/', async (req, res) => {
     3. Format citations as [id1][id2] if multiple sources support a fact
     4. If information is missing or unclear, acknowledge this
     5. Structure the answer with clear paragraphs
-    6. End with a "Sources:" section listing all cited sources
 
     Example format:
-    "Asa Jennings arrived in Smyrna in August 1922 [bio_12]. During the Great Fire, he worked with both Greek and Turkish authorities [doc_45][web_2] to coordinate evacuation efforts..."
-
-    Sources:
-    [bio_12] Character biography
-    [doc_45] Chapter 3 excerpt
-    [web_2] Historical article
+    "Asa Jennings arrived in Smyrna in August 1922 [bio_12]. During the Great Fire, he worked with both Greek and Turkish authorities [doc_45][web_2] to coordinate evacuation efforts."
     `;
 
     const answer = await generateFinalAnswer(finalPrompt);
