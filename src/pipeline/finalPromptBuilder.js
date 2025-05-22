@@ -25,28 +25,29 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     - Query Type: ${queryInfo.query_type || 'General'}
     - Query Focus: ${queryInfo.focus || 'Not specified'}
     
-    CORE KNOWLEDGE BASE:
-    ${compressedKnowledge.compressed_text}
-    
-    ESSENTIAL POINTS:
-    ${compressedKnowledge.key_points.map((point, i) => `${i + 1}. ${point}`).join('\n')}
-    
-    SOURCE SNIPPETS:
+    RELEVANT SOURCES:
     ${compressedKnowledge.source_snippets.map(snippet => 
-      `[${snippet.id}]: "${snippet.text}"
-       Relevance: ${snippet.relevance}`
+      `[${snippet.id}] From ${snippet.source}:
+      "${snippet.text}"
+      Relevance: ${snippet.relevance}`
     ).join('\n\n')}
+    
+    KEY POINTS:
+    ${compressedKnowledge.key_points.map((point, i) => `[KP${i+1}] ${point}`).join('\n')}
     `;
     
     // Add web search information if available
     if (webSummary && webSummary.summary) {
       context += `
       
-      ADDITIONAL INFORMATION FROM WEB SEARCH:
-      ${webSummary.summary}
+      ADDITIONAL WEB SOURCES:
+      ${webSummary.source_urls.map((url, i) => 
+        `[WEB${i+1}] From ${url}:
+        "${webSummary.summaries[i]}"`
+      ).join('\n\n')}
       
       ADDITIONAL FACTS:
-      ${webSummary.facts.map(fact => `- ${fact}`).join('\n')}
+      ${webSummary.facts.map((fact, i) => `[WEB${i+1}] ${fact}`).join('\n')}
       `;
     }
     
@@ -70,18 +71,26 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     2. Well-structured with clear organization
     3. Factually accurate and based ONLY on the provided information
     4. Written in a natural, engaging style
-    5. Include citations to sources using [source_id] format after each fact or quote
-    6. If information is missing or unclear, acknowledge the gaps
+    5. Include citations to sources using [source_id] format
     
-    CITATION INSTRUCTIONS:
-    - Use [source_id] format to cite sources
-    - Place citations immediately after the fact they support
-    - If multiple sources support a fact, include all: [source1][source2]
-    - If a fact isn't supported by the sources, acknowledge this
+    CITATION RULES:
+    - Every fact must have a citation in [brackets]
+    - Use [source_id] format, e.g. [bio_12] or [chapter_3]
+    - Multiple sources can be combined like [bio_12][chapter_3]
+    - Citations go at the end of the sentence containing the fact
+    - End with a "Sources:" section listing all cited sources and their relevance
+    
+    Example format:
+    "Asa Jennings arrived in Smyrna in August 1922 [bio_12]. During the Great Fire, he worked with both Greek and Turkish authorities [chapter_3][web_2] to coordinate evacuation efforts."
+    
+    Sources:
+    [bio_12] Character biography - Primary source for early life
+    [chapter_3] Chapter excerpt - Details of evacuation efforts
+    [web_2] Historical article - Corroborating evidence
     
     ${context}
     
-    Provide a thoughtful, well-reasoned response to the query, being sure to cite your sources.
+    Remember: Base your answer ONLY on the provided context. If information is missing or unclear, acknowledge this rather than making assumptions.
     `;
     
     logger.info('Final prompt built:', { 
