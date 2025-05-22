@@ -163,13 +163,10 @@ async function summarizeWebResults(searchResults, originalQuery) {
     1. Extracts key facts relevant to the query
     2. Resolves any contradictions between sources
     3. Provides accurate, factual information
-    4. Uses [WEB1], [WEB2], etc. to cite sources
-    
-    Example format:
-    "Asa Jennings arrived in Smyrna in August 1922 [WEB1]. During the Great Fire, he worked with both Greek and Turkish authorities [WEB2][WEB3] to coordinate evacuation efforts."
+    4. Presents information without source citations
     
     Format your response as a JSON object with:
-    - summary: A coherent paragraph with [WEB1], [WEB2] etc. citations
+    - summary: A coherent paragraph without citations
     - facts: Array of objects with:
       * text: The factual statement
       * sources: Array of source numbers (1, 2, etc.)

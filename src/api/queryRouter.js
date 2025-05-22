@@ -107,13 +107,12 @@ router.post('/', async (req, res) => {
 
     INSTRUCTIONS:
     1. Based ONLY on the above context, provide a clear and concise answer
-    2. Use [source_id] citations after EVERY fact or quote
-    3. Format citations as [id1][id2] if multiple sources support a fact
-    4. If information is missing or unclear, acknowledge this
-    5. Structure the answer with clear paragraphs
+    2. Present information without source citations
+    3. If information is missing or unclear, acknowledge this
+    4. Structure the answer with clear paragraphs
 
     Example format:
-    "Asa Jennings arrived in Smyrna in August 1922 [bio_12]. During the Great Fire, he worked with both Greek and Turkish authorities [doc_45][web_2] to coordinate evacuation efforts."
+    "Asa Jennings arrived in Smyrna in August 1922. During the Great Fire, he worked with both Greek and Turkish authorities to coordinate evacuation efforts."
     `;
 
     const answer = await generateFinalAnswer(finalPrompt);
