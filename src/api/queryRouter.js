@@ -97,10 +97,12 @@ router.post('/', async (req, res) => {
 
     ${webResults ? `
     ADDITIONAL CONTEXT FROM WEB:
+    ${webResults.summary}
+    
+    WEB SOURCES:
     ${webResults.source_urls.map((url, i) => 
-      `[WEB${i+1}] From ${url}:
-      "${webResults.summaries[i]}"`
-    ).join('\n\n')}
+      `[WEB${i+1}] ${url}`
+    ).join('\n')}
     ` : ''}
 
     INSTRUCTIONS:
