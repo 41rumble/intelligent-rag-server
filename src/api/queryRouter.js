@@ -21,9 +21,17 @@ router.post('/', async (req, res) => {
     const { projectId, query } = req.body;
     
     if (!projectId || !query) {
-      return res.status(400).json({
+      // Set headers for streaming response
+      res.setHeader('Content-Type', 'application/x-ndjson');
+      res.setHeader('Transfer-Encoding', 'chunked');
+      res.setHeader('Cache-Control', 'no-cache');
+      
+      // Send error in streaming format
+      res.write(JSON.stringify({
         error: 'Missing required parameters: projectId and query are required'
-      });
+      }) + '\n');
+      res.end();
+      return;
     }
 
     // Set headers for streaming response
@@ -381,8 +389,8 @@ router.post('/', async (req, res) => {
         ).join('\n')
     );
 
-    // Return response with progress information
-    return res.json({
+    // Send final response with answer and sources
+    res.write(JSON.stringify({
       answer: answer.trim(),
       source_snippets: [...formattedSnippets, ...webSources],
       log: responseLog,
@@ -423,13 +431,18 @@ router.post('/', async (req, res) => {
         total_steps: 5,
         completed_steps: 5
       }
-    });
+    }) + '\n');
+    
+    // End the response stream
+    res.end();
   } catch (error) {
     logger.error('Error processing query:', error);
-    return res.status(500).json({
+    // Send error response in streaming format
+    res.write(JSON.stringify({
       error: 'Failed to process query',
       message: error.message
-    });
+    }) + '\n');
+    res.end();
   }
 });
 
