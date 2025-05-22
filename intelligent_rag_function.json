@@ -1,4 +1,4 @@
-{
+[{
     "id": "intelligent_rag_pipe",
     "user_id": "4fb3eabf-97d8-4d8f-af39-a618d9f22e16",
     "name": "Intelligent RAG",
@@ -57,4 +57,4 @@
             }
         }
     }
-}
+}]
