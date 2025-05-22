@@ -165,30 +165,53 @@ router.post('/', async (req, res) => {
     };
 
     // Format source snippets
-    formattedSnippets = processedContext.source_snippets.map(snippet => ({
-      id: snippet.id,
-      text: snippet.text,
-      source: snippet.source,
-      relevance: snippet.relevance || 1.0,
-      metadata: {
-        type: snippet.type || 'text',
-        chapter: snippet.chapter || null,
-        page: snippet.page || null
+    formattedSnippets = processedContext.source_snippets.map(snippet => {
+      // Generate a meaningful ID based on the source type and content
+      let sourceId;
+      if (snippet.type === 'chapter_synopsis') {
+        sourceId = `ch_${snippet.chapter || 'unknown'}`;
+      } else if (snippet.type === 'bio') {
+        sourceId = `bio_${(snippet.name || 'unknown').toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+      } else if (snippet.type === 'plot_event') {
+        sourceId = `event_${snippet.id || 'unknown'}`;
+      } else if (snippet.type === 'location_description') {
+        sourceId = `loc_${(snippet.location || 'unknown').toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+      } else {
+        sourceId = `doc_${snippet.id || 'unknown'}`;
       }
-    }));
+
+      return {
+        id: sourceId,
+        text: snippet.text,
+        source: snippet.source,
+        relevance: snippet.relevance || 1.0,
+        metadata: {
+          type: snippet.type || 'text',
+          chapter: snippet.chapter || null,
+          page: snippet.page || null,
+          name: snippet.name || null,
+          location: snippet.location || null
+        }
+      };
+    });
 
     // Format web sources
-    webSources = webResults ? webResults.source_urls.map((url, index) => ({
-      id: `web_${index + 1}`,
-      text: url.url || url,
-      source: 'web',
-      relevance: 1.0,
-      metadata: {
-        type: 'web',
-        url: url.url || url,
-        title: url.title || null
-      }
-    })) : [];
+    webSources = webResults ? webResults.source_urls.map((url, index) => {
+      const urlObj = typeof url === 'string' ? { url } : url;
+      const domain = new URL(urlObj.url).hostname.replace('www.', '');
+      return {
+        id: `web_${domain.replace(/[^a-z0-9]/g, '_')}`,
+        text: urlObj.url,
+        source: 'web',
+        relevance: 1.0,
+        metadata: {
+          type: 'web',
+          url: urlObj.url,
+          title: urlObj.title || null,
+          domain: domain
+        }
+      };
+    }) : [];
 
     // Log the formatted response
     logger.info('\n=== Query Response ===\n' +
