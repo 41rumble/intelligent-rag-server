@@ -387,7 +387,7 @@ router.post('/', async (req, res) => {
         ).join('\n')
     );
 
-    // Send final response with answer and sources
+    // Send final progress update and answer
     res.write(Buffer.from(JSON.stringify({
       type: 'progress',
       data: {
@@ -429,12 +429,18 @@ router.post('/', async (req, res) => {
       }
     }) + '\n', 'utf8'));
 
-    // Send final answer
-    return res.json({
-      answer: answer.trim(),
-      source_snippets: [...formattedSnippets, ...webSources],
-      log: responseLog
-    });
+    // Send final answer as part of stream
+    res.write(Buffer.from(JSON.stringify({
+      type: 'answer',
+      data: {
+        answer: answer.trim(),
+        source_snippets: [...formattedSnippets, ...webSources],
+        log: responseLog
+      }
+    }) + '\n', 'utf8'));
+
+    // End the response stream
+    res.end();
   } catch (error) {
     logger.error('Error processing query:', error);
     return res.status(500).json({
