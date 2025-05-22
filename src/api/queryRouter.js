@@ -21,29 +21,23 @@ router.post('/', async (req, res) => {
     const { projectId, query } = req.body;
     
     if (!projectId || !query) {
-      // Set headers for streaming response
-      res.setHeader('Content-Type', 'application/x-ndjson');
-      res.setHeader('Transfer-Encoding', 'chunked');
-      res.setHeader('Cache-Control', 'no-cache');
-      
-      // Send error in streaming format
-      res.write(JSON.stringify({
+      return res.status(400).json({
         error: 'Missing required parameters: projectId and query are required'
-      }) + '\n');
-      res.end();
-      return;
+      });
     }
 
     // Set headers for streaming response
-    res.setHeader('Content-Type', 'application/x-ndjson');
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
     res.setHeader('Transfer-Encoding', 'chunked');
     res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
 
     logger.info('Starting query processing:', { projectId, query });
 
     // Send initial progress
     res.write(JSON.stringify({
-      progress: {
+      type: 'progress',
+      data: {
         steps: [
           {
             id: 'query_expansion',
@@ -68,7 +62,8 @@ router.post('/', async (req, res) => {
 
     // Update progress for document search
     res.write(JSON.stringify({
-      progress: {
+      type: 'progress',
+      data: {
         steps: [
           {
             id: 'query_expansion',
@@ -112,7 +107,8 @@ router.post('/', async (req, res) => {
 
     // Update progress for web search
     res.write(JSON.stringify({
-      progress: {
+      type: 'progress',
+      data: {
         steps: [
           {
             id: 'query_expansion',
@@ -149,7 +145,8 @@ router.post('/', async (req, res) => {
 
     // Update progress for context processing
     res.write(JSON.stringify({
-      progress: {
+      type: 'progress',
+      data: {
         steps: [
           {
             id: 'query_expansion',
@@ -200,7 +197,8 @@ router.post('/', async (req, res) => {
 
     // Update progress for answer generation
     res.write(JSON.stringify({
-      progress: {
+      type: 'progress',
+      data: {
         steps: [
           {
             id: 'query_expansion',
@@ -391,10 +389,8 @@ router.post('/', async (req, res) => {
 
     // Send final response with answer and sources
     res.write(JSON.stringify({
-      answer: answer.trim(),
-      source_snippets: [...formattedSnippets, ...webSources],
-      log: responseLog,
-      progress: {
+      type: 'progress',
+      data: {
         steps: [
           {
             id: 'query_expansion',
@@ -432,17 +428,19 @@ router.post('/', async (req, res) => {
         completed_steps: 5
       }
     }) + '\n');
-    
-    // End the response stream
-    res.end();
+
+    // Send final answer
+    return res.json({
+      answer: answer.trim(),
+      source_snippets: [...formattedSnippets, ...webSources],
+      log: responseLog
+    });
   } catch (error) {
     logger.error('Error processing query:', error);
-    // Send error response in streaming format
-    res.write(JSON.stringify({
+    return res.status(500).json({
       error: 'Failed to process query',
       message: error.message
-    }) + '\n');
-    res.end();
+    });
   }
 });
 
