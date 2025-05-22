@@ -108,15 +108,17 @@ async function generateEmbedding(text) {
  * Generate text completion using the configured LLM
  * @param {string} prompt - Prompt text
  * @param {Object} options - Additional options
+ * @param {function} [onProgress] - Optional callback for streaming progress
  * @returns {Promise<string>} Generated text
  */
-async function generateCompletion(prompt, options = {}) {
+async function generateCompletion(prompt, options = {}, onProgress = null) {
   try {
     const {
       temperature = 0.7,
       maxTokens = 2000,
       responseFormat = null,
-      systemPrompt = null
+      systemPrompt = null,
+      stream = false
     } = options;
     
     if (LLM_PROVIDER === 'openai') {
@@ -132,16 +134,31 @@ async function generateCompletion(prompt, options = {}) {
         model: OPENAI_LLM_MODEL,
         messages,
         temperature,
-        max_tokens: maxTokens
+        max_tokens: maxTokens,
+        stream: stream
       };
       
       if (responseFormat) {
         requestOptions.response_format = { type: responseFormat };
       }
-      
-      const response = await openaiClient.chat.completions.create(requestOptions);
-      
-      return response.choices[0].message.content;
+
+      if (stream && onProgress) {
+        let fullContent = '';
+        const stream = await openaiClient.chat.completions.create(requestOptions);
+        
+        for await (const chunk of stream) {
+          const content = chunk.choices[0]?.delta?.content || '';
+          fullContent += content;
+          if (onProgress) {
+            onProgress(content);
+          }
+        }
+        
+        return fullContent;
+      } else {
+        const response = await openaiClient.chat.completions.create(requestOptions);
+        return response.choices[0].message.content;
+      }
     } else if (LLM_PROVIDER === 'ollama') {
       const messages = [];
       
@@ -150,17 +167,40 @@ async function generateCompletion(prompt, options = {}) {
       }
       
       messages.push({ role: 'user', content: prompt });
-      
-      const response = await ollamaClient.chat({
-        model: OLLAMA_LLM_MODEL,
-        messages,
-        options: {
-          temperature,
-          num_predict: maxTokens
+
+      if (stream && onProgress) {
+        let fullContent = '';
+        const stream = await ollamaClient.chat({
+          model: OLLAMA_LLM_MODEL,
+          messages,
+          options: {
+            temperature,
+            num_predict: maxTokens
+          },
+          stream: true
+        });
+
+        for await (const chunk of stream) {
+          const content = chunk.message?.content || '';
+          fullContent += content;
+          if (onProgress) {
+            onProgress(content);
+          }
         }
-      });
-      
-      return response.message.content;
+
+        return fullContent;
+      } else {
+        const response = await ollamaClient.chat({
+          model: OLLAMA_LLM_MODEL,
+          messages,
+          options: {
+            temperature,
+            num_predict: maxTokens
+          }
+        });
+        
+        return response.message.content;
+      }
     }
   } catch (error) {
     logger.error('Error generating completion:', error);

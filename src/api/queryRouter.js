@@ -182,7 +182,7 @@ router.post('/', async (req, res) => {
     // Step 4: Process all context
     const processedContext = await handleOversizedContext([
       ...uniqueDocs,
-      ...(webResults ? [{ 
+      ...(webResults ? [{
         text: webResults.summary,
         source: 'web',
         metadata: { urls: webResults.source_urls }
@@ -271,7 +271,24 @@ router.post('/', async (req, res) => {
     "Asa Jennings arrived in Smyrna in August 1922. During the Great Fire, he worked with both Greek and Turkish authorities to coordinate evacuation efforts."
     `;
 
-    const answer = await generateFinalAnswer(finalPrompt);
+    // Create a buffer to collect the answer
+    let answerBuffer = '';
+
+    // Generate answer with streaming
+    const answer = await generateFinalAnswer(finalPrompt, (chunk) => {
+      // Append chunk to buffer
+      answerBuffer += chunk;
+      
+      // Send answer progress
+      res.write(Buffer.from(JSON.stringify({
+        type: 'answer_progress',
+        data: {
+          text: chunk,
+          complete: false
+        }
+      }) + '\n', 'utf8'));
+    });
+
     logger.info('Answer generated:', { length: answer.length });
 
     // Initialize empty arrays for snippets
@@ -375,19 +392,19 @@ router.post('/', async (req, res) => {
       `Answer: ${answer}\n\n` +
       '=== Source Snippets ===\n' +
       [...formattedSnippets, ...webSources]
-        .map(snippet => 
+        .map(snippet =>
           `[${snippet.id}]\n` +
           `Text: ${snippet.text}\n` +
           `Relevance: ${snippet.relevance}\n`
         ).join('\n') +
       '\n=== Pipeline Steps ===\n' +
       responseLog.steps
-        .map(step => 
+        .map(step =>
           `${step.step}:\n${JSON.stringify(step.result, null, 2)}\n`
         ).join('\n')
     );
 
-    // Send final progress update and answer
+    // Send final progress update
     res.write(Buffer.from(JSON.stringify({
       type: 'progress',
       data: {
@@ -429,10 +446,12 @@ router.post('/', async (req, res) => {
       }
     }) + '\n', 'utf8'));
 
-    // Send final answer as part of stream
+    // Send final answer completion
     res.write(Buffer.from(JSON.stringify({
-      type: 'answer',
+      type: 'answer_progress',
       data: {
+        text: '',
+        complete: true,
         answer: answer.trim(),
         source_snippets: [...formattedSnippets, ...webSources],
         log: responseLog

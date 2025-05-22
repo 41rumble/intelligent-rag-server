@@ -124,9 +124,10 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
 /**
  * Generate the final answer using the LLM
  * @param {string} finalPrompt - Final prompt for the LLM
+ * @param {function} [onProgress] - Optional callback for streaming progress
  * @returns {Promise<string>} Generated answer
  */
-async function generateFinalAnswer(finalPrompt) {
+async function generateFinalAnswer(finalPrompt, onProgress = null) {
   try {
     // Validate and clean the prompt
     if (!finalPrompt || typeof finalPrompt !== 'string') {
@@ -138,8 +139,9 @@ async function generateFinalAnswer(finalPrompt) {
       temperature: 0.5, // Lower temperature for more focused answers
       maxTokens: 1500,  // Slightly shorter but more concise answers
       presencePenalty: 0.5, // Encourage diversity in response
-      frequencyPenalty: 0.3 // Reduce repetition
-    });
+      frequencyPenalty: 0.3, // Reduce repetition
+      stream: !!onProgress // Enable streaming if onProgress is provided
+    }, onProgress);
     
     // Validate the answer
     if (!answer || answer.trim().length === 0) {
