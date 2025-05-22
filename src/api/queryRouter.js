@@ -35,7 +35,7 @@ router.post('/', async (req, res) => {
     logger.info('Starting query processing:', { projectId, query });
 
     // Send initial progress
-    res.write(JSON.stringify({
+    res.write(Buffer.from(JSON.stringify({
       type: 'progress',
       data: {
         steps: [
@@ -50,7 +50,7 @@ router.post('/', async (req, res) => {
         total_steps: 5,
         completed_steps: 0
       }
-    }) + '\n');
+    }) + '\n', 'utf8'));
 
     // Step 1: Generate similar queries to expand search coverage
     const expandedQueries = await expandQuery(query, 3);
@@ -61,7 +61,7 @@ router.post('/', async (req, res) => {
     });
 
     // Update progress for document search
-    res.write(JSON.stringify({
+    res.write(Buffer.from(JSON.stringify({
       type: 'progress',
       data: {
         steps: [
@@ -82,7 +82,7 @@ router.post('/', async (req, res) => {
         total_steps: 5,
         completed_steps: 1
       }
-    }) + '\n');
+    }) + '\n', 'utf8'));
 
     // Step 2: Search documents with all queries
     const allQueries = [query, ...expandedQueries];
@@ -106,7 +106,7 @@ router.post('/', async (req, res) => {
     });
 
     // Update progress for web search
-    res.write(JSON.stringify({
+    res.write(Buffer.from(JSON.stringify({
       type: 'progress',
       data: {
         steps: [
@@ -133,7 +133,7 @@ router.post('/', async (req, res) => {
         total_steps: 5,
         completed_steps: 2
       }
-    }) + '\n');
+    }) + '\n', 'utf8'));
 
     // Step 3: Get relevant web content
     const webQuery = `${query} book:"${projectId}"`;
@@ -144,7 +144,7 @@ router.post('/', async (req, res) => {
     });
 
     // Update progress for context processing
-    res.write(JSON.stringify({
+    res.write(Buffer.from(JSON.stringify({
       type: 'progress',
       data: {
         steps: [
@@ -177,7 +177,7 @@ router.post('/', async (req, res) => {
         total_steps: 5,
         completed_steps: 3
       }
-    }) + '\n');
+    }) + '\n', 'utf8'));
 
     // Step 4: Process all context
     const processedContext = await handleOversizedContext([
@@ -196,7 +196,7 @@ router.post('/', async (req, res) => {
     });
 
     // Update progress for answer generation
-    res.write(JSON.stringify({
+    res.write(Buffer.from(JSON.stringify({
       type: 'progress',
       data: {
         steps: [
@@ -235,7 +235,7 @@ router.post('/', async (req, res) => {
         total_steps: 5,
         completed_steps: 4
       }
-    }) + '\n');
+    }) + '\n', 'utf8'));
 
     // Step 5: Generate final answer with citations
     const finalPrompt = `
@@ -388,7 +388,7 @@ router.post('/', async (req, res) => {
     );
 
     // Send final response with answer and sources
-    res.write(JSON.stringify({
+    res.write(Buffer.from(JSON.stringify({
       type: 'progress',
       data: {
         steps: [
@@ -427,7 +427,7 @@ router.post('/', async (req, res) => {
         total_steps: 5,
         completed_steps: 5
       }
-    }) + '\n');
+    }) + '\n', 'utf8'));
 
     // Send final answer
     return res.json({
