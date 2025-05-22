@@ -101,8 +101,8 @@ router.post('/', async (req, res) => {
     
     WEB SOURCES:
     ${webResults.source_urls.map((url, i) => 
-      `[WEB${i+1}] ${url}`
-    ).join('\n')}
+      `[WEB${i+1}] ${url.title || ''}\n${url.url || url}`
+    ).join('\n\n')}
     ` : ''}
 
     INSTRUCTIONS:
@@ -185,14 +185,15 @@ router.post('/', async (req, res) => {
     }));
 
     // Format web sources
-    webSources = webResults ? webResults.source_urls.map(url => ({
-      id: `web_${url.replace(/[^a-zA-Z0-9]/g, '_')}`,
-      text: url,
+    webSources = webResults ? webResults.source_urls.map((url, index) => ({
+      id: `web_${index + 1}`,
+      text: url.url || url,
       source: 'web',
       relevance: 1.0,
       metadata: {
         type: 'web',
-        url: url
+        url: url.url || url,
+        title: url.title || null
       }
     })) : [];
 
