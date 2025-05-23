@@ -259,11 +259,19 @@ async function generateFinalAnswer(finalPrompt) {
       throw new Error('Invalid prompt format');
     }
 
+    // Log the prompt for debugging
+    logger.info('Sending prompt to LLM:', {
+      prompt_length: finalPrompt.length,
+      context_length: finalPrompt.split('QUERY INFORMATION:')[1].length,
+      has_web_data: finalPrompt.includes('WEB SOURCES'),
+      has_book_data: finalPrompt.includes('BOOK SOURCES')
+    });
+
     // Generate the answer with more focused parameters
     const parsedResponse = await generateStructuredResponse(finalPrompt, {
-      temperature: 0.5, // Lower temperature for more focused answers
-      maxTokens: 1500,  // Slightly shorter but more concise answers
-      systemPrompt: "You are a JSON-only assistant that always responds with valid JSON."
+      temperature: 0.3, // Even lower temperature for more focused answers
+      maxTokens: 2000,  // Allow more space for citations and analysis
+      systemPrompt: "You are a JSON-only assistant that focuses on direct answers with citations."
     });
 
     // Validate and normalize the response structure
@@ -272,31 +280,84 @@ async function generateFinalAnswer(finalPrompt) {
       throw new Error('Invalid response format from LLM');
     }
 
-    // Initialize answer structure if missing
-    parsedResponse.answer = parsedResponse.answer || {};
-    parsedResponse.answer.text = parsedResponse.answer.text || 'No relevant information found.';
-    parsedResponse.answer.citations = Array.isArray(parsedResponse.answer.citations) ? 
-      parsedResponse.answer.citations : [];
+    // Log raw response for debugging
+    logger.info('Raw LLM response:', {
+      has_answer: !!parsedResponse.answer,
+      has_text: !!parsedResponse.answer?.text,
+      has_citations: Array.isArray(parsedResponse.answer?.citations),
+      citations_count: parsedResponse.answer?.citations?.length || 0
+    });
 
-    // Initialize source analysis if missing
-    parsedResponse.source_analysis = parsedResponse.source_analysis || {
+    // Initialize and validate answer structure
+    if (!parsedResponse.answer || typeof parsedResponse.answer !== 'object') {
+      logger.warn('Missing answer object, initializing empty');
+      parsedResponse.answer = {};
+    }
+
+    // Validate answer text
+    if (!parsedResponse.answer.text || typeof parsedResponse.answer.text !== 'string') {
+      logger.warn('Invalid or missing answer text');
+      parsedResponse.answer.text = 'No relevant information found.';
+    } else if (parsedResponse.answer.text.length < 10) {
+      logger.warn('Answer text suspiciously short:', {
+        text: parsedResponse.answer.text,
+        length: parsedResponse.answer.text.length
+      });
+    }
+
+    // Validate citations
+    if (!Array.isArray(parsedResponse.answer.citations)) {
+      logger.warn('Invalid citations format, initializing empty array');
+      parsedResponse.answer.citations = [];
+    } else {
+      // Filter out invalid citations
+      parsedResponse.answer.citations = parsedResponse.answer.citations.filter(citation => {
+        const isValid = citation && 
+                       typeof citation === 'object' &&
+                       typeof citation.id === 'string' &&
+                       typeof citation.source === 'string';
+        if (!isValid) {
+          logger.warn('Removing invalid citation:', { citation });
+        }
+        return isValid;
+      });
+    }
+
+    // Initialize and validate source analysis
+    parsedResponse.source_analysis = {
       book_sources_used: false,
       web_sources_used: false,
       missing_information: [],
-      source_conflicts: []
+      source_conflicts: [],
+      ...parsedResponse.source_analysis
     };
 
-    // Ensure all source_analysis fields exist
+    // Ensure correct types for source analysis fields
     parsedResponse.source_analysis.book_sources_used = 
       !!parsedResponse.source_analysis.book_sources_used;
     parsedResponse.source_analysis.web_sources_used = 
       !!parsedResponse.source_analysis.web_sources_used;
     parsedResponse.source_analysis.missing_information = 
       Array.isArray(parsedResponse.source_analysis.missing_information) ? 
-      parsedResponse.source_analysis.missing_information : [];
+      parsedResponse.source_analysis.missing_information.filter(x => typeof x === 'string') : [];
     parsedResponse.source_analysis.source_conflicts = 
       Array.isArray(parsedResponse.source_analysis.source_conflicts) ? 
-      parsedResponse.source_analysis.source_conflicts : [];
+      parsedResponse.source_analysis.source_conflicts.filter(x => typeof x === 'string') : [];
+
+    // Verify citations match the text
+    const citationsInText = (parsedResponse.answer.text.match(/\[\w+\d*\]/g) || [])
+      .map(c => c.slice(1, -1));
+    const citationIds = parsedResponse.answer.citations.map(c => c.id);
+    
+    const missingCitations = citationsInText.filter(id => !citationIds.includes(id));
+    const unusedCitations = citationIds.filter(id => !citationsInText.includes(id));
+    
+    if (missingCitations.length > 0 || unusedCitations.length > 0) {
+      logger.warn('Citation mismatch:', {
+        missing_citations: missingCitations,
+        unused_citations: unusedCitations
+      });
+    }
     
     // Log successful parsing
     logger.info('Successfully parsed LLM response:', {
@@ -306,23 +367,68 @@ async function generateFinalAnswer(finalPrompt) {
       has_conflicts: parsedResponse.source_analysis.source_conflicts.length > 0
     });
     
-    // Remove citations from the answer text
-    const cleanAnswer = parsedResponse.answer.text.replace(/\[\w+\d*\]/g, '').replace(/\s+/g, ' ').trim();
+    // Clean up the answer text while preserving citations
+    const cleanAnswer = parsedResponse.answer.text
+      .replace(/\s+/g, ' ')  // Normalize whitespace
+      .replace(/\[\s+/g, '[')  // Remove space after [
+      .replace(/\s+\]/g, ']')  // Remove space before ]
+      .replace(/\]\s*\[/g, '][')  // Combine adjacent citations
+      .trim();
     
-    // Format the final answer without citations in the text
-    const formattedAnswer = `${cleanAnswer}
+    // Group citations by source type
+    const webCitations = parsedResponse.answer.citations
+      .filter(c => c.id.startsWith('WEB'));
+    const bookCitations = parsedResponse.answer.citations
+      .filter(c => !c.id.startsWith('WEB'));
+    
+    // Format the final answer
+    let formattedAnswer = cleanAnswer;
 
-References:
-${parsedResponse.answer.citations.map(citation => 
-  `[${citation.id}] ${citation.source} - ${citation.relevance}`
-).join('\n')}
+    // Add references section if we have any
+    if (parsedResponse.answer.citations.length > 0) {
+      formattedAnswer += '\n\nReferences:';
+      
+      // Add web references first for web-focused queries
+      if (webCitations.length > 0) {
+        formattedAnswer += '\nWeb Sources:';
+        formattedAnswer += '\n' + webCitations
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .map(citation => `[${citation.id}] ${citation.source}${citation.relevance ? ` - ${citation.relevance}` : ''}`)
+          .join('\n');
+      }
+      
+      // Add book references
+      if (bookCitations.length > 0) {
+        formattedAnswer += '\nBook Sources:';
+        formattedAnswer += '\n' + bookCitations
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .map(citation => `[${citation.id}] ${citation.source}${citation.relevance ? ` - ${citation.relevance}` : ''}`)
+          .join('\n');
+      }
+    }
 
-${parsedResponse.source_analysis.missing_information.length > 0 ? `Missing Information:
-${parsedResponse.source_analysis.missing_information.map(info => `- ${info}`).join('\n')}` : ''}
+    // Add missing information if any
+    if (parsedResponse.source_analysis.missing_information.length > 0) {
+      formattedAnswer += '\n\nMissing Information:';
+      formattedAnswer += '\n' + parsedResponse.source_analysis.missing_information
+        .map(info => `- ${info}`)
+        .join('\n');
+    }
 
-${parsedResponse.source_analysis.source_conflicts.length > 0 ? `Source Conflicts:
-${parsedResponse.source_analysis.source_conflicts.map(conflict => `- ${conflict}`).join('\n')}` : ''}
-    `.trim();
+    // Add source conflicts if any
+    if (parsedResponse.source_analysis.source_conflicts.length > 0) {
+      formattedAnswer += '\n\nSource Conflicts:';
+      formattedAnswer += '\n' + parsedResponse.source_analysis.source_conflicts
+        .map(conflict => `- ${conflict}`)
+        .join('\n');
+    }
+
+    // Add source analysis
+    formattedAnswer += '\n\nSource Analysis:';
+    formattedAnswer += `\n- Book sources ${parsedResponse.source_analysis.book_sources_used ? 'were' : 'were not'} used`;
+    formattedAnswer += `\n- Web sources ${parsedResponse.source_analysis.web_sources_used ? 'were' : 'were not'} used`;
+    
+    formattedAnswer = formattedAnswer.trim();
     
     logger.info('Final answer generated:', { 
       answer_length: formattedAnswer.length,
