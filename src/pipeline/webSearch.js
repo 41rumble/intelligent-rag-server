@@ -173,6 +173,56 @@ async function performWebSearch(query, queryInfo, numResults = 8) {
 }
 
 /**
+ * Quick analysis of a single search result
+ */
+async function analyzeSearchResult(result, index, originalQuery) {
+  const prompt = `
+  Analyze this search result for the query: "${originalQuery}"
+
+  RESULT:
+  Title: ${result.title}
+  URL: ${result.url}
+  Content: ${result.content}
+
+  Quickly determine:
+  1. Is this result relevant to the query?
+  2. What specific information helps answer the query?
+  3. Rate relevance from 1-10
+
+  Format response as JSON with:
+  - is_relevant: boolean
+  - relevance_score: number 1-10
+  - key_points: Array of short, relevant facts (empty if not relevant)
+  - reasoning: Brief explanation of relevance/irrelevance
+  `;
+
+  try {
+    const analysis = await generateStructuredResponse(prompt, {
+      temperature: 0.3,
+      systemPrompt: "You are a quick analysis assistant. Be concise and focus only on relevance to the query."
+    });
+
+    return {
+      ...analysis,
+      result_index: index,
+      url: result.url,
+      title: result.title
+    };
+  } catch (error) {
+    logger.warn(`Failed to analyze result ${index}`, { error: error.message });
+    return {
+      is_relevant: false,
+      relevance_score: 0,
+      key_points: [],
+      reasoning: "Analysis failed",
+      result_index: index,
+      url: result.url,
+      title: result.title
+    };
+  }
+}
+
+/**
  * Summarize web search results
  * @param {Array} searchResults - Web search results
  * @param {string} originalQuery - Original query
@@ -187,80 +237,83 @@ async function summarizeWebResults(searchResults, originalQuery) {
         source_urls: []
       };
     }
-    
-    // Format search results for the prompt
-    const formattedResults = searchResults.map((result, index) => 
-      `[${index + 1}] ${result.title}\nURL: ${result.url}\n${result.content}`
-    ).join('\n\n');
-    
-    const prompt = `
-    Analyze the following web search results for the query: "${originalQuery}"
-    
-    SEARCH RESULTS:
-    ${formattedResults}
-    
-    First, evaluate each search result's relevance to the original query:
-    1. How directly does it address the query?
-    2. Does it provide unique, valuable information?
-    3. Is it from a reliable source?
-    
-    Then, for ONLY the relevant results that help answer the query:
-    1. Extract key facts that specifically address the query
-    2. Resolve any contradictions between sources
-    3. Provide accurate, factual information
-    4. Use [WEB1], [WEB2], etc. to cite sources
-    
-    Example format:
-    "After evaluating the sources, results 1, 3, and 4 directly address the query. Result 2 is off-topic, and result 5 is too general.
-    
-    Relevant information: Asa Jennings arrived in Smyrna in August 1922 [WEB1]. During the Great Fire, he worked with both Greek and Turkish authorities [WEB3][WEB4] to coordinate evacuation efforts."
-    
-    Format your response as a JSON object with:
-    - relevance_analysis: A brief explanation of which results were relevant and why
-    - summary: A coherent paragraph with [WEB1], [WEB2] etc. citations (ONLY including relevant information)
+
+    // First pass: Quick analysis of each result
+    logger.info('Starting individual result analysis');
+    const analysisPromises = searchResults.map((result, index) => 
+      analyzeSearchResult(result, index + 1, originalQuery)
+    );
+    const analyses = await Promise.all(analysisPromises);
+
+    // Filter relevant results
+    const relevantAnalyses = analyses.filter(a => a.is_relevant && a.relevance_score > 3);
+    logger.info('Relevant results found:', {
+      total: searchResults.length,
+      relevant: relevantAnalyses.length,
+      scores: relevantAnalyses.map(a => a.relevance_score)
+    });
+
+    if (relevantAnalyses.length === 0) {
+      return {
+        summary: 'No relevant web search results found.',
+        facts: [],
+        source_urls: []
+      };
+    }
+
+    // Second pass: Combine relevant information
+    const combinedPrompt = `
+    Synthesize these relevant search results for the query: "${originalQuery}"
+
+    RELEVANT FINDINGS:
+    ${relevantAnalyses.map(a => `
+    [WEB${a.result_index}] ${a.title}
+    Relevance: ${a.relevance_score}/10
+    Key Points:
+    ${a.key_points.map(p => `- ${p}`).join('\n')}
+    `).join('\n')}
+
+    Create a comprehensive answer that:
+    1. Combines related information
+    2. Resolves any contradictions
+    3. Uses [WEB1], [WEB2] etc. citations
+    4. Focuses on answering the original query
+
+    Format response as JSON with:
+    - summary: A coherent paragraph with citations
     - facts: Array of objects with:
-      * text: The factual statement that helps answer the query
-      * relevance: Brief explanation of how this fact helps answer the query
-      * sources: Array of source numbers (1, 2, etc.)
+      * text: The factual statement
+      * relevance: How it helps answer the query
+      * sources: Array of source numbers
     - source_urls: Array of objects with:
       * id: "WEB1", "WEB2", etc.
       * url: The source URL
       * title: The source title
-      * relevance_score: 1-10 rating of how relevant this source is to the query
+      * relevance_score: 1-10 rating
     `;
 
-    const response = await generateStructuredResponse(prompt, {
-      temperature: 0.3, // Low temperature for more focused responses
-      systemPrompt: "You are a JSON-only assistant. Your response must be valid JSON with the exact structure specified."
+    const response = await generateStructuredResponse(combinedPrompt, {
+      temperature: 0.3,
+      systemPrompt: "You are a synthesis assistant. Combine information accurately and cite sources."
     });
 
-    // Validate JSON response
-    const result = validateJsonResponse(response, {
-      required: ['relevance_analysis', 'summary', 'facts', 'source_urls'],
-      fields: {
-        relevance_analysis: 'string',
-        summary: 'string',
-        facts: 'object',
-        source_urls: 'object'
-      }
-    });
-    
-    logger.info('Web results summarized:', { 
+    // Add source information
+    response.source_urls = relevantAnalyses.map(a => ({
+      id: `WEB${a.result_index}`,
+      url: a.url,
+      title: a.title,
+      relevance_score: a.relevance_score
+    }));
+
+    logger.info('Web results synthesized:', {
       query: originalQuery,
-      summary_length: result.summary.length,
-      facts_count: result.facts.length,
-      summary: result.summary,
-      facts: result.facts,
-      sources: result.source_urls.map(s => ({
-        id: s.id,
-        url: s.url,
-        title: s.title,
-        relevance_score: s.relevance_score
-      }))
+      summary_length: response.summary.length,
+      facts_count: response.facts.length,
+      sources: response.source_urls.length
     });
-    
+
     return {
-      ...result,
+      ...response,
       source: 'web_search_summary',
       query: originalQuery
     };
