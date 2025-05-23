@@ -95,27 +95,38 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     const finalPrompt = `
     You are an intelligent assistant specializing in comprehensive research and analysis. Answer the following query based on the provided context.
 
-    RESPONSE FORMAT:
-    Your response must be a valid JSON object with the following structure:
+    CRITICAL: YOU MUST RESPOND WITH VALID JSON ONLY. DO NOT INCLUDE ANY TEXT BEFORE OR AFTER THE JSON.
+    
+    Your response must be a single JSON object with this exact structure:
     {
       "answer": {
-        "text": "Main answer text with citations in [brackets]",
+        "text": "Your answer text here with citations like [WEB1] or [bio_2]",
         "citations": [
           {
-            "id": "WEB1",
-            "source": "Source title/description",
-            "relevance": "Why this source is relevant"
-          },
-          // ... more citations
+            "id": "source_id",
+            "source": "source name/title",
+            "relevance": "brief explanation of source relevance"
+          }
         ]
       },
       "source_analysis": {
-        "book_sources_used": boolean,
-        "web_sources_used": boolean,
-        "missing_information": ["List of any important missing information"],
-        "source_conflicts": ["Any conflicts between sources found"]
+        "book_sources_used": true,
+        "web_sources_used": true,
+        "missing_information": [
+          "list any key missing information"
+        ],
+        "source_conflicts": [
+          "list any conflicts between sources"
+        ]
       }
     }
+
+    IMPORTANT JSON FORMATTING RULES:
+    1. Use double quotes (") for all strings
+    2. No trailing commas
+    3. Boolean values must be true or false (no quotes)
+    4. Arrays can be empty [] but must be present
+    5. No comments in the JSON
 
     CITATION REQUIREMENTS:
     1. Every factual statement must have a citation
@@ -202,21 +213,54 @@ async function generateFinalAnswer(finalPrompt) {
       frequencyPenalty: 0.3 // Reduce repetition
     });
     
-    // Parse the response as JSON
+    // Clean and parse the response
     let parsedResponse;
     try {
-      parsedResponse = JSON.parse(response);
-    } catch (parseError) {
-      logger.error('Failed to parse LLM response as JSON:', {
-        error: parseError.message,
-        response: response
+      // Clean the response - remove any non-JSON content
+      const jsonStart = response.indexOf('{');
+      const jsonEnd = response.lastIndexOf('}') + 1;
+      if (jsonStart === -1 || jsonEnd === 0) {
+        throw new Error('No JSON object found in response');
+      }
+      const cleanJson = response.slice(jsonStart, jsonEnd);
+      
+      // Try to parse the cleaned JSON
+      parsedResponse = JSON.parse(cleanJson);
+      
+      // Validate the response structure
+      if (!parsedResponse.answer?.text || !Array.isArray(parsedResponse.answer?.citations)) {
+        throw new Error('Response missing required fields: answer.text or answer.citations');
+      }
+      
+      if (!parsedResponse.source_analysis || 
+          typeof parsedResponse.source_analysis.book_sources_used !== 'boolean' ||
+          typeof parsedResponse.source_analysis.web_sources_used !== 'boolean' ||
+          !Array.isArray(parsedResponse.source_analysis.missing_information) ||
+          !Array.isArray(parsedResponse.source_analysis.source_conflicts)) {
+        throw new Error('Response missing required source_analysis fields');
+      }
+      
+      // Log successful parsing
+      logger.info('Successfully parsed LLM response:', {
+        text_length: parsedResponse.answer.text.length,
+        citations_count: parsedResponse.answer.citations.length,
+        has_missing_info: parsedResponse.source_analysis.missing_information.length > 0,
+        has_conflicts: parsedResponse.source_analysis.source_conflicts.length > 0
       });
-      throw new Error('Invalid response format from LLM');
-    }
-    
-    // Validate the response structure
-    if (!parsedResponse.answer?.text || !Array.isArray(parsedResponse.answer?.citations)) {
-      throw new Error('Response missing required fields');
+      
+    } catch (parseError) {
+      logger.error('Failed to parse LLM response:', {
+        error: parseError.message,
+        response_length: response.length,
+        response_preview: response.slice(0, 200) + '...',
+        stack: parseError.stack
+      });
+      
+      // Attempt to salvage non-JSON response
+      if (!parsedResponse) {
+        return `${response.trim()}\n\nNote: Response formatting error - citations may not be properly structured.`;
+      }
+      throw parseError;
     }
     
     // Format the final answer with citations
