@@ -7,6 +7,9 @@ require('dotenv').config();
 // SearXNG instance URL
 const searxngInstance = process.env.SEARXNG_INSTANCE;
 
+// Constants
+const MAX_CONTENT_LENGTH = 2000;
+
 // Axios instance with custom config
 const axiosInstance = axios.create({
   timeout: 5000, // 5 second timeout
@@ -195,7 +198,7 @@ async function analyzeSearchResult(result, index, originalQuery) {
   ${hasTimeContext ? 'TIME CONTEXT: Pay special attention to dates and chronological information.' : ''}
 
   Content:
-  "${result.content.length > maxContentLength ? result.content.substring(0, maxContentLength) + '...' : result.content}"
+  "${result.content.length > MAX_CONTENT_LENGTH ? result.content.substring(0, MAX_CONTENT_LENGTH) + '...' : result.content}"
 
   Source:
   Title: ${result.title}
@@ -230,14 +233,13 @@ async function analyzeSearchResult(result, index, originalQuery) {
       throw new Error('Invalid result content');
     }
 
-    // Define max content length
-    const maxContentLength = 2000;
+
 
     // Log analysis attempt
     logger.info(`Analyzing result ${index}:`, {
       title: result.title,
       content_length: result.content.length,
-      truncated: result.content.length > maxContentLength,
+      truncated: result.content.length > MAX_CONTENT_LENGTH,
       query_type: isNavalQuery ? 'naval/military' : 'general'
     });
 
