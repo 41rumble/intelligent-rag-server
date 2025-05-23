@@ -12,14 +12,32 @@ require('dotenv').config();
  */
 async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = null, evaluationInfo = null) {
   try {
-    // Validate required inputs
-    if (!queryInfo || !compressedKnowledge || !compressedKnowledge.compressed_text) {
-      throw new Error('Missing required context for prompt building');
+    // Validate and normalize inputs
+    if (!queryInfo) {
+      throw new Error('Missing queryInfo for prompt building');
     }
+
+    // Ensure compressedKnowledge has all required fields
+    compressedKnowledge = compressedKnowledge || {};
+    compressedKnowledge.compressed_text = compressedKnowledge.compressed_text || '';
+    compressedKnowledge.source_snippets = compressedKnowledge.source_snippets || [];
+    compressedKnowledge.key_points = compressedKnowledge.key_points || [];
+
+    // Log what we're working with
+    logger.info('Building final prompt with:', {
+      query: queryInfo.original_query,
+      compressed_length: compressedKnowledge.compressed_text.length,
+      snippets: compressedKnowledge.source_snippets.length,
+      key_points: compressedKnowledge.key_points.length,
+      has_web: !!webSummary?.summary
+    });
 
     // Determine if RAG has relevant information
     const hasRelevantRAG = compressedKnowledge.source_snippets.some(s => 
-      s.relevance && s.relevance.toLowerCase().includes('high'));
+      s.relevance && (
+        s.relevance.toLowerCase().includes('high') || 
+        (typeof s.relevance === 'number' && s.relevance >= 7)
+      ));
     
     // Base context with more structured information
     let context = `
@@ -29,19 +47,23 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     - Query Type: ${queryInfo.query_type || 'General'}
     - Query Focus: ${queryInfo.focus || 'Not specified'}
     
-    ${hasRelevantRAG ? `
-    RELEVANT BOOK SOURCES:
+    ${compressedKnowledge.source_snippets.length > 0 ? `
+    BOOK SOURCES:
     ${compressedKnowledge.source_snippets.map(snippet => 
       `[${snippet.id}] From ${snippet.source}:
       "${snippet.text}"
       Relevance: ${snippet.relevance}`
     ).join('\n\n')}
     
+    ${compressedKnowledge.key_points.length > 0 ? `
     KEY POINTS FROM BOOKS:
     ${compressedKnowledge.key_points.map((point, i) => `[KP${i+1}] ${point}`).join('\n')}
+    ` : ''}
     ` : `
-    NOTE: No highly relevant information found in the book sources for this query.
-    The answer will primarily rely on web sources and general knowledge.
+    NOTE: No information found in the book sources for this query.
+    ${webSummary?.summary ? 
+      'The answer will be based on web sources.' : 
+      'No relevant information was found in either book or web sources. Please acknowledge this in your response.'}
     `}
     `;
     
@@ -216,19 +238,38 @@ async function generateFinalAnswer(finalPrompt) {
       maxTokens: 1500,  // Slightly shorter but more concise answers
       systemPrompt: "You are a JSON-only assistant that always responds with valid JSON."
     });
-    
-    // Validate the response structure
-    if (!parsedResponse.answer?.text || !Array.isArray(parsedResponse.answer?.citations)) {
-      throw new Error('Response missing required fields: answer.text or answer.citations');
+
+    // Validate and normalize the response structure
+    if (!parsedResponse || typeof parsedResponse !== 'object') {
+      logger.error('Invalid response format:', { response: parsedResponse });
+      throw new Error('Invalid response format from LLM');
     }
-    
-    if (!parsedResponse.source_analysis || 
-        typeof parsedResponse.source_analysis.book_sources_used !== 'boolean' ||
-        typeof parsedResponse.source_analysis.web_sources_used !== 'boolean' ||
-        !Array.isArray(parsedResponse.source_analysis.missing_information) ||
-        !Array.isArray(parsedResponse.source_analysis.source_conflicts)) {
-      throw new Error('Response missing required source_analysis fields');
-    }
+
+    // Initialize answer structure if missing
+    parsedResponse.answer = parsedResponse.answer || {};
+    parsedResponse.answer.text = parsedResponse.answer.text || 'No relevant information found.';
+    parsedResponse.answer.citations = Array.isArray(parsedResponse.answer.citations) ? 
+      parsedResponse.answer.citations : [];
+
+    // Initialize source analysis if missing
+    parsedResponse.source_analysis = parsedResponse.source_analysis || {
+      book_sources_used: false,
+      web_sources_used: false,
+      missing_information: [],
+      source_conflicts: []
+    };
+
+    // Ensure all source_analysis fields exist
+    parsedResponse.source_analysis.book_sources_used = 
+      !!parsedResponse.source_analysis.book_sources_used;
+    parsedResponse.source_analysis.web_sources_used = 
+      !!parsedResponse.source_analysis.web_sources_used;
+    parsedResponse.source_analysis.missing_information = 
+      Array.isArray(parsedResponse.source_analysis.missing_information) ? 
+      parsedResponse.source_analysis.missing_information : [];
+    parsedResponse.source_analysis.source_conflicts = 
+      Array.isArray(parsedResponse.source_analysis.source_conflicts) ? 
+      parsedResponse.source_analysis.source_conflicts : [];
     
     // Log successful parsing
     logger.info('Successfully parsed LLM response:', {
