@@ -361,12 +361,29 @@ async function generateFinalAnswer(finalPrompt) {
     
     // Log successful parsing
     logger.info('Successfully parsed LLM response:', {
-      text_length: parsedResponse.answer.text.length,
-      citations_count: parsedResponse.answer.citations.length,
-      has_missing_info: parsedResponse.source_analysis.missing_information.length > 0,
-      has_conflicts: parsedResponse.source_analysis.source_conflicts.length > 0
+      text_length: parsedResponse?.answer?.text?.length || 0,
+      citations_count: parsedResponse?.answer?.citations?.length || 0,
+      has_missing_info: parsedResponse?.source_analysis?.missing_information?.length > 0,
+      has_conflicts: parsedResponse?.source_analysis?.source_conflicts?.length > 0
     });
     
+    // Ensure we have a valid response structure
+    if (!parsedResponse?.answer?.text) {
+      logger.warn('Missing or invalid answer text in response');
+      parsedResponse = {
+        answer: {
+          text: 'No valid response was generated.',
+          citations: []
+        },
+        source_analysis: {
+          book_sources_used: false,
+          web_sources_used: false,
+          missing_information: ['Failed to generate a valid response'],
+          source_conflicts: []
+        }
+      };
+    }
+
     // Clean up the answer text while preserving citations
     const cleanAnswer = parsedResponse.answer.text
       .replace(/\s+/g, ' ')  // Normalize whitespace

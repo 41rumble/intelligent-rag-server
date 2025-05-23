@@ -67,26 +67,73 @@ router.post('/', async (req, res) => {
     });
 
     // Step 4: Process all context
-    const processedContext = await handleOversizedContext([
-      ...uniqueDocs,
-      ...(webResults ? [{ 
-        text: webResults.summary,
-        source: 'web',
-        metadata: { urls: webResults.source_urls }
-      }] : [])
-    ], query);
+    let processedContext;
+    try {
+      processedContext = await handleOversizedContext([
+        ...uniqueDocs,
+        ...(webResults ? [{ 
+          text: webResults.summary,
+          source: 'web',
+          metadata: { urls: webResults.source_urls }
+        }] : [])
+      ], query);
 
-    logger.info('Context processed:', {
-      contextLength: processedContext.compressed_text.length,
-      keyPoints: processedContext.key_points.length,
-      sources: processedContext.source_ids.length
+      logger.info('Context processed:', {
+        contextLength: processedContext?.compressed_text?.length || 0,
+        keyPoints: processedContext?.key_points?.length || 0,
+        sources: processedContext?.source_ids?.length || 0
+      });
+    } catch (error) {
+      logger.warn('Error processing context:', {
+        error: error.message,
+        uniqueDocs: uniqueDocs.length,
+        hasWebResults: !!webResults
+      });
+      
+      // Provide a valid structure even on error
+      processedContext = {
+        compressed_text: 'Failed to process context.',
+        key_points: [],
+        source_ids: [],
+        source_snippets: [],
+        error: error.message
+      };
+    }
+
+    // Determine if this is a naval/military query
+    const isNavalQuery = query.toLowerCase().includes('naval') ||
+                        query.toLowerCase().includes('ship') ||
+                        query.toLowerCase().includes('military') ||
+                        query.toLowerCase().includes('war');
+
+    // Look for temporal indicators
+    const hasTimeContext = query.toLowerCase().includes('during') ||
+                          query.toLowerCase().includes('after') ||
+                          query.toLowerCase().includes('before') ||
+                          query.toLowerCase().includes('when');
+
+    // Check if query is about events outside the book
+    const isExternalQuery = query.toLowerCase().includes('not related to') ||
+                          query.toLowerCase().includes('other than') ||
+                          query.toLowerCase().includes('outside of');
+
+    logger.info('Query analysis:', {
+      query,
+      is_naval_query: isNavalQuery,
+      has_time_context: hasTimeContext,
+      is_external_query: isExternalQuery
     });
 
     // Step 5: Generate final answer with citations
     const finalPrompt = `
-    QUERY: "${query}"
-    PROJECT: "${projectId}"
+    QUERY INFORMATION:
+    Original Query: "${query}"
+    Project: "${projectId}"
+    Query Type: ${isNavalQuery ? 'Naval/Military History' : 'General'}
+    ${hasTimeContext ? 'Time Context: Pay special attention to dates and chronological information' : ''}
+    ${isExternalQuery ? 'External Focus: Query asks about events outside the book context' : ''}
 
+    ${processedContext.source_snippets.length > 0 ? `
     CONTEXT FROM DOCUMENTS:
     ${processedContext.source_snippets.map(snippet => 
       `[${snippet.id}] From ${snippet.source}:
@@ -95,6 +142,7 @@ router.post('/', async (req, res) => {
 
     KEY POINTS:
     ${processedContext.key_points.map((p, i) => `[KP${i+1}] ${p}`).join('\n')}
+    ` : 'NO RELEVANT BOOK CONTEXT FOUND'}
 
     ${webResults ? `
     ADDITIONAL CONTEXT FROM WEB:
@@ -104,7 +152,7 @@ router.post('/', async (req, res) => {
     ${webResults.source_urls.map((url, i) => 
       `[WEB${i+1}] ${url.title || ''}\n${url.url || url}`
     ).join('\n\n')}
-    ` : ''}
+    ` : 'NO WEB SOURCES AVAILABLE'}
 
     INSTRUCTIONS:
     1. Based ONLY on the above context, provide a clear and concise answer
@@ -113,6 +161,9 @@ router.post('/', async (req, res) => {
     4. If information is missing or unclear, acknowledge this
     5. Structure the answer with clear paragraphs
     6. End with a "Sources:" section listing all cited sources
+    7. ${isNavalQuery ? 'Focus on military operations, wartime activities, and ship deployments' : ''}
+    8. ${hasTimeContext ? 'Pay special attention to dates and chronological order' : ''}
+    9. ${isExternalQuery ? 'Clearly distinguish between book events and external historical events' : ''}
 
     Example format:
     "Asa Jennings arrived in Smyrna in August 1922 [bio_12]. During the Great Fire, he worked with both Greek and Turkish authorities [doc_45][web_2] to coordinate evacuation efforts..."
@@ -123,8 +174,34 @@ router.post('/', async (req, res) => {
     [web_2] Historical article
     `;
 
-    const answer = await generateFinalAnswer(finalPrompt);
-    logger.info('Answer generated:', { length: answer.length });
+    // Generate final answer with error handling
+    let answer;
+    try {
+      answer = await generateFinalAnswer(finalPrompt);
+      logger.info('Answer generated:', { 
+        length: answer?.length || 0,
+        has_citations: answer?.includes('[') || false,
+        has_sources: answer?.includes('Sources:') || false
+      });
+    } catch (error) {
+      logger.error('Error generating final answer:', {
+        error: error.message,
+        prompt_length: finalPrompt.length,
+        has_context: processedContext.source_snippets.length > 0,
+        has_web: !!webResults
+      });
+
+      // Provide a fallback answer
+      answer = `I apologize, but I encountered an error while generating the answer. 
+
+Here's what I know:
+${webResults ? `- Found ${webResults.source_urls.length} relevant web sources about this topic` : '- No web sources found'}
+${processedContext.source_snippets.length > 0 ? `- Found ${processedContext.source_snippets.length} relevant passages in the book` : '- No relevant book passages found'}
+
+The error was: ${error.message}
+
+Please try rephrasing your question or being more specific about what you'd like to know.`;
+    }
 
     // Initialize empty arrays for snippets
     let formattedSnippets = [];
