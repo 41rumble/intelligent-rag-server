@@ -19,9 +19,7 @@ class ResponseManager extends EventEmitter {
     const controller = {
       status: 'initializing',
       startTime: Date.now(),
-      updates: [],
-      finalResponse: null,
-      timeoutId: null
+      finalResponse: null
     };
 
     this.activeResponses.set(requestId, controller);
@@ -29,80 +27,39 @@ class ResponseManager extends EventEmitter {
   }
 
   /**
-   * Update response stream with initial answer
+   * Update response stream with answer chunk
    * @param {string} requestId - Request identifier
-   * @param {Object} initialAnswer - Initial answer to stream
+   * @param {Object} chunk - Answer chunk to stream
    */
-  async streamInitialAnswer(requestId, initialAnswer) {
+  async streamChunk(requestId, chunk) {
     const controller = this.activeResponses.get(requestId);
     if (!controller) return;
 
-    controller.status = 'streaming_initial';
+    controller.status = 'streaming';
     this.emit('update', requestId, {
-      type: 'initial_answer',
-      content: initialAnswer,
+      type: 'chunk',
+      content: chunk,
       status: 'in_progress'
     });
-
-    // Set timeout for background processing
-    controller.timeoutId = setTimeout(() => {
-      this.emit('update', requestId, {
-        type: 'processing_update',
-        content: 'Still processing additional context and analysis...',
-        status: 'in_progress'
-      });
-    }, 5000);
   }
 
   /**
-   * Update response with background processing results
+   * Finalize response with complete answer
    * @param {string} requestId - Request identifier
-   * @param {Object} update - Update information
-   */
-  async addBackgroundUpdate(requestId, update) {
-    const controller = this.activeResponses.get(requestId);
-    if (!controller) return;
-
-    controller.updates.push(update);
-    controller.status = 'processing_background';
-
-    // Only emit if we're still within reasonable time
-    const processingTime = Date.now() - controller.startTime;
-    if (processingTime < 30000) { // 30 seconds
-      this.emit('update', requestId, {
-        type: 'background_update',
-        content: update,
-        status: 'in_progress'
-      });
-    }
-  }
-
-  /**
-   * Finalize response with enhanced answer
-   * @param {string} requestId - Request identifier
-   * @param {Object} finalAnswer - Enhanced final answer
+   * @param {Object} finalAnswer - Complete answer
    */
   async finalizeResponse(requestId, finalAnswer) {
     const controller = this.activeResponses.get(requestId);
     if (!controller) return;
 
-    // Clear any pending timeouts
-    if (controller.timeoutId) {
-      clearTimeout(controller.timeoutId);
-    }
-
     controller.status = 'completed';
     controller.finalResponse = finalAnswer;
 
-    // Only emit final update if processing time was reasonable
-    const processingTime = Date.now() - controller.startTime;
-    if (processingTime < 30000) { // 30 seconds
-      this.emit('update', requestId, {
-        type: 'final_answer',
-        content: finalAnswer,
-        status: 'completed'
-      });
-    }
+    this.emit('update', requestId, {
+      type: 'final',
+      content: finalAnswer,
+      status: 'completed'
+    });
 
     // Cleanup
     this.activeResponses.delete(requestId);
@@ -116,11 +73,6 @@ class ResponseManager extends EventEmitter {
   async handleError(requestId, error) {
     const controller = this.activeResponses.get(requestId);
     if (!controller) return;
-
-    // Clear any pending timeouts
-    if (controller.timeoutId) {
-      clearTimeout(controller.timeoutId);
-    }
 
     controller.status = 'error';
     this.emit('update', requestId, {
