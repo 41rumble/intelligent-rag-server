@@ -1,6 +1,7 @@
 const axios = require('axios');
 const logger = require('../utils/logger');
 const { generateStructuredResponse } = require('../utils/llmProvider');
+const { validateJsonResponse } = require('../utils/jsonValidator');
 require('dotenv').config();
 
 // SearXNG instance URL
@@ -228,9 +229,21 @@ async function summarizeWebResults(searchResults, originalQuery) {
       * relevance_score: 1-10 rating of how relevant this source is to the query
     `;
 
-    const result = await generateStructuredResponse(prompt, {
+    const response = await generateStructuredResponse(prompt, {
       temperature: 0.3,
-      maxTokens: 1000
+      maxTokens: 1000,
+      systemPrompt: "You are a JSON-only assistant. Your response must be valid JSON with the exact structure specified."
+    });
+
+    // Validate JSON response
+    const result = validateJsonResponse(response, {
+      required: ['relevance_analysis', 'summary', 'facts', 'source_urls'],
+      fields: {
+        relevance_analysis: 'string',
+        summary: 'string',
+        facts: 'object',
+        source_urls: 'object'
+      }
     });
     
     logger.info('Web results summarized:', { 
