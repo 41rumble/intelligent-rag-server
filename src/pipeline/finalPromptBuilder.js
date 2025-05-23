@@ -214,8 +214,7 @@ async function generateFinalAnswer(finalPrompt) {
     const parsedResponse = await generateStructuredResponse(finalPrompt, {
       temperature: 0.5, // Lower temperature for more focused answers
       maxTokens: 1500,  // Slightly shorter but more concise answers
-      maxRetries: 3,    // Retry up to 3 times if JSON parsing fails
-      systemPrompt: "You are a JSON-only assistant that always responds with valid JSON. Never include any text outside the JSON structure."
+      systemPrompt: "You are a JSON-only assistant that always responds with valid JSON."
     });
       
       // Validate the response structure

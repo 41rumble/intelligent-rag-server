@@ -206,118 +206,57 @@ function extractJsonString(text) {
 }
 
 async function generateStructuredResponse(prompt, options = {}) {
-  const maxRetries = options.maxRetries || 3;
-  let lastError = null;
-  let lastResponse = null;
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  if (LLM_PROVIDER === 'openai') {
+    // OpenAI supports JSON response format natively
+    const response = await generateCompletion(prompt, {
+      ...options,
+      responseFormat: 'json_object',
+      systemPrompt: "You are a helpful assistant that always responds with valid JSON. Never include any explanatory text outside the JSON structure."
+    });
+    
     try {
-      if (LLM_PROVIDER === 'openai') {
-        // OpenAI supports JSON response format natively
-        const response = await generateCompletion(prompt, {
-          ...options,
-          responseFormat: 'json_object',
-          systemPrompt: "You are a helpful assistant that always responds with valid JSON. Never include any explanatory text outside the JSON structure."
-        });
-        
-        lastResponse = response;
-        return JSON.parse(response);
-      } else if (LLM_PROVIDER === 'ollama') {
-        // Log the original prompt
-        logger.info('Original prompt:', prompt);
-        
-        // For Ollama, we need to explicitly request JSON in the prompt
-        const jsonPrompt = `You are a JSON-only assistant. You must respond with ONLY valid JSON, no other text.
+      return JSON.parse(response);
+    } catch (error) {
+      logger.error('Failed to parse OpenAI response as JSON:', {
+        error: error.message,
+        response_preview: response.substring(0, 100)
+      });
+      throw new Error('Invalid JSON response from OpenAI');
+    }
+  } else if (LLM_PROVIDER === 'ollama') {
+    // For Ollama, we need to explicitly request JSON in the prompt
+    const jsonPrompt = `You are a JSON-only assistant. You must respond with ONLY valid JSON.
 
 TASK:
 ${prompt}
 
-CRITICAL RULES:
-1. Response must be ONLY valid JSON
-2. No text before or after the JSON
-3. No backticks, markdown, or code blocks
-4. No explanations or comments
-5. Start with { and end with }
+CRITICAL: Response must be valid JSON only. Start with { and end with }. No other text.`;
 
-Example of GOOD response:
-{"key": "value"}
-
-Example of BAD response:
-Here's the JSON:
-\`\`\`json
-{"key": "value"}
-\`\`\`
-
-RESPOND NOW:`;
-
-        // Log the full prompt being sent
-        logger.info('Full prompt being sent to Ollama:', jsonPrompt);
-        
-        // Add system prompt if not provided
-        if (!options.systemPrompt) {
-          options.systemPrompt = "You are a JSON-only assistant. Never include any text outside the JSON structure.";
-        }
-        
-        const response = await generateCompletion(jsonPrompt, {
-          ...options,
-          temperature: options.temperature || 0.1 // Very low temperature for structured output
-        });
-        
-        // Log the raw response
-        logger.info('Raw response from Ollama:', response);
-        
-        lastResponse = response;
-        
-        // Clean the response
-        const cleanedResponse = response
-          .trim()
-          .replace(/^[\s\n]*```[^\n]*\n/, '') // Remove opening code fence
-          .replace(/\n```[\s\n]*$/, '')       // Remove closing code fence
-          .replace(/^[^{[\n]*/, '')           // Remove any text before first { or [
-          .replace(/[^\}\]]*$/, '')           // Remove any text after last } or ]
-          .trim();
-        
-        // Log the cleaned response
-        logger.info('Cleaned response:', cleanedResponse);
-        
-        // Try to parse the cleaned response
-        try {
-          const parsed = JSON.parse(cleanedResponse);
-          logger.info('Successfully parsed JSON:', parsed);
-          return parsed;
-        } catch (firstError) {
-          // Log the parsing error
-          logger.error('Failed to parse cleaned response:', firstError.message);
-          
-          // If that fails, try to extract JSON
-          const jsonStr = extractJsonString(cleanedResponse);
-          if (jsonStr) {
-            try {
-              const extracted = JSON.parse(jsonStr);
-              logger.info('Successfully parsed extracted JSON:', extracted);
-              return extracted;
-            } catch (secondError) {
-              lastError = secondError;
-              logger.error('Failed to parse extracted JSON:', jsonStr);
-              logger.error('Parse error:', secondError.message);
-              throw new Error('Failed to parse extracted JSON');
-            }
-          }
-          lastError = firstError;
-          logger.error('No valid JSON found in response:', cleanedResponse);
-          throw new Error('No valid JSON found in response');
-        }
-      }
+    // Add system prompt if not provided
+    if (!options.systemPrompt) {
+      options.systemPrompt = "You are a JSON-only assistant. Never include any text outside the JSON structure.";
+    }
+    
+    const response = await generateCompletion(jsonPrompt, {
+      ...options,
+      temperature: options.temperature || 0.1 // Very low temperature for structured output
+    });
+    
+    // Clean the response - just remove whitespace and code fences
+    const cleanedResponse = response
+      .trim()
+      .replace(/^[\s\n]*```[^\n]*\n/, '')
+      .replace(/\n```[\s\n]*$/, '')
+      .trim();
+    
+    try {
+      return JSON.parse(cleanedResponse);
     } catch (error) {
-      if (attempt === maxRetries) {
-        logger.error(`All ${maxRetries} attempts to generate structured response failed.`);
-        logger.error('Last error:', error);
-        logger.error('Last response:', lastResponse);
-        throw lastError || error;
-      }
-      logger.warn(`Attempt ${attempt}/${maxRetries} failed, retrying...`);
-      // Wait a bit before retrying, with exponential backoff
-      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+      logger.error('Failed to parse Ollama response as JSON:', {
+        error: error.message,
+        response_preview: cleanedResponse.substring(0, 100)
+      });
+      throw new Error('Invalid JSON response from Ollama');
     }
   }
 }
