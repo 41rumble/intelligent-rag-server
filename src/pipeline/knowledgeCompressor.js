@@ -34,59 +34,112 @@ async function compressKnowledge(documents, query) {
       return `[${index + 1}] Type: ${doc.type}\nID: ${doc._id}\n${content}`;
     }).join('\n\n');
     
-    const prompt = `
-    Compress and synthesize the following information to answer this query: "${query}"
-    
-    DOCUMENTS:
-    ${formattedDocs}
-    
-    Create a coherent synthesis that:
-    1. Directly addresses the query
-    2. Combines information from multiple sources
-    3. Resolves any contradictions
-    4. Maintains factual accuracy
-    5. Cites which source number ([1], [2], etc.) each piece of information comes from
-    
-    Format your response as a JSON object with:
-    - compressed_text: A coherent, comprehensive answer to the query
-    - key_points: An array of the most important points
-    - source_ids: An array of the document IDs that were most relevant
-    - source_snippets: An array of objects, each containing:
-      * id: The document ID
-      * text: A relevant snippet from the source (max 100 words)
-      * relevance: Brief explanation of how this snippet supports the answer
-    `;
-
-    const result = await generateStructuredResponse(prompt, {
-      temperature: 0.3,
-      maxTokens: 1500
+    // Log what we're working with
+    logger.info('Compressing knowledge:', {
+      query,
+      doc_count: documents.length,
+      doc_types: documents.map(d => d.type),
+      doc_ids: documents.map(d => d._id)
     });
-    
-    // Validate result structure
-    if (!result || typeof result !== 'object') {
-      logger.error('Invalid result from generateStructuredResponse:', { result });
-      return {
-        compressed_text: 'Failed to compress knowledge: Invalid response format.',
-        key_points: [],
-        source_ids: [],
-        source_snippets: []
-      };
+
+    const prompt = `
+    Query: "${query}"
+
+    Return ONLY a JSON object that answers this query using these sources:
+    ${formattedDocs}
+
+    {
+      "compressed_text": "Direct answer to query with [1] style citations",
+      "key_points": [
+        "Key fact 1 with [2] citation",
+        "Key fact 2 with [1][3] citations"
+      ],
+      "source_ids": ["doc_id_1", "doc_id_2"],
+      "source_snippets": [
+        {
+          "id": "doc_id_1",
+          "text": "Relevant 50-word quote",
+          "relevance": "One line explaining relevance"
+        }
+      ]
     }
 
-    // Ensure required fields exist
-    result.compressed_text = result.compressed_text || '';
-    result.key_points = result.key_points || [];
-    result.source_ids = result.source_ids || [];
-    result.source_snippets = result.source_snippets || [];
+    REQUIREMENTS:
+    1. ONLY return the JSON object
+    2. Focus ONLY on information relevant to query
+    3. Use [1], [2] etc. citations for every fact
+    4. Keep snippets under 50 words
+    5. Only include relevant sources
+    `;
 
-    logger.info('Knowledge compressed:', { 
-      query,
-      compressed_length: result.compressed_text.length,
-      key_points_count: result.key_points.length,
-      source_count: result.source_ids.length
-    });
-    
-    return result;
+    try {
+      const result = await generateStructuredResponse(prompt, {
+        temperature: 0.3,
+        maxTokens: 1500,
+        systemPrompt: "You are a JSON-only assistant that focuses on relevant information."
+      });
+      
+      // Validate result structure
+      if (!result || typeof result !== 'object') {
+        logger.error('Invalid result from generateStructuredResponse:', { result });
+        throw new Error('Invalid response format');
+      }
+
+      // Ensure required fields exist and are correct types
+      result.compressed_text = typeof result.compressed_text === 'string' ? result.compressed_text : '';
+      result.key_points = Array.isArray(result.key_points) ? result.key_points : [];
+      result.source_ids = Array.isArray(result.source_ids) ? result.source_ids : [];
+      result.source_snippets = Array.isArray(result.source_snippets) ? result.source_snippets : [];
+
+      // Validate content
+      if (!result.compressed_text && result.key_points.length === 0) {
+        logger.warn('Empty response from LLM:', {
+          query,
+          doc_count: documents.length,
+          prompt_length: prompt.length
+        });
+        throw new Error('No relevant information found');
+      }
+
+      // Log success with details
+      logger.info('Knowledge compressed:', { 
+        query,
+        compressed_length: result.compressed_text.length,
+        key_points_count: result.key_points.length,
+        source_count: result.source_ids.length,
+        has_citations: result.compressed_text.includes('['),
+        snippet_count: result.source_snippets.length
+      });
+      
+      return {
+        ...result,
+        metadata: {
+          input_docs: documents.length,
+          output_length: result.compressed_text.length,
+          has_citations: result.compressed_text.includes('['),
+          source_coverage: result.source_ids.length / documents.length
+        }
+      };
+    } catch (error) {
+      logger.error('Error in knowledge compression:', {
+        error: error.message,
+        query,
+        doc_count: documents.length
+      });
+      
+      return {
+        compressed_text: 'Failed to compress knowledge: ' + error.message,
+        key_points: [],
+        source_ids: [],
+        source_snippets: [],
+        error: error.message,
+        metadata: {
+          input_docs: documents.length,
+          error_type: error.name,
+          error_message: error.message
+        }
+      };
+    }
   } catch (error) {
     logger.error('Error compressing knowledge:', error);
     return {
@@ -146,25 +199,33 @@ async function handleOversizedContext(documents, query) {
     
     // Final synthesis of the entire conversation
     const finalPrompt = `
-    Now that you've analyzed all parts of the information about: "${query}"
-    
-    Full conversation:
+    Query: "${query}"
+
+    Return ONLY a JSON object that synthesizes this conversation:
     ${conversation}
-    
-    Create a final, coherent synthesis that:
-    1. Directly addresses the original query
-    2. Combines all the information from our conversation
-    3. Resolves any contradictions
-    4. Maintains factual accuracy
-    
-    Format your response as a JSON object with:
-    - compressed_text: A coherent, comprehensive answer to the query
-    - key_points: An array of the most important points
-    - source_ids: An array of the document IDs that were most relevant
-    - source_snippets: An array of objects, each containing:
-      * id: The document ID
-      * text: A relevant snippet from the source (max 100 words)
-      * relevance: Brief explanation of how this snippet supports the answer
+
+    {
+      "compressed_text": "Direct answer to query with [1] style citations",
+      "key_points": [
+        "Key fact 1 with [2] citation",
+        "Key fact 2 with [1][3] citations"
+      ],
+      "source_ids": ["doc_id_1", "doc_id_2"],
+      "source_snippets": [
+        {
+          "id": "doc_id_1",
+          "text": "Relevant 50-word quote",
+          "relevance": "One line explaining relevance"
+        }
+      ]
+    }
+
+    REQUIREMENTS:
+    1. ONLY return the JSON object
+    2. Focus ONLY on information relevant to query
+    3. Use [1], [2] etc. citations for every fact
+    4. Keep snippets under 50 words
+    5. Only include relevant sources
     `;
 
     const result = await generateStructuredResponse(finalPrompt, {
