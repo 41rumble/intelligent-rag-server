@@ -60,11 +60,20 @@ async function withRetry(requestFn, retries = MAX_RETRIES) {
  * @returns {Promise<Array>} Search results
  */
 async function performWebSearch(query, queryInfo, numResults = 8) {
+  logger.info('Starting web search:', {
+    query,
+    queryInfo,
+    initial_numResults: numResults,
+    searxng_instance: searxngInstance
+  });
+
   // Increase results when query is factual or RAG might lack info
-  if (queryInfo.query_type === 'factual' || 
-      queryInfo.analytical_requirements.context_needed.includes('factual')) {
+  if (queryInfo?.query_type === 'factual' || 
+      queryInfo?.analytical_requirements?.context_needed?.includes('factual')) {
     numResults = 12; // Get more results for factual queries
+    logger.info('Increased results for factual query:', { numResults });
   }
+
   try {
     if (!searxngInstance) {
       logger.warn('SearXNG instance URL not configured');
@@ -73,23 +82,42 @@ async function performWebSearch(query, queryInfo, numResults = 8) {
 
     // Validate and sanitize the URL
     let searchUrl;
-    if (searxngInstance.includes('localhost')) {
-      // Force HTTP for localhost
-      searchUrl = new URL('/search', searxngInstance.replace('https://', 'http://')).toString();
-    } else {
-      searchUrl = new URL('/search', searxngInstance).toString();
+    try {
+      if (searxngInstance.includes('localhost')) {
+        // Force HTTP for localhost
+        searchUrl = new URL('/search', searxngInstance.replace('https://', 'http://')).toString();
+      } else {
+        searchUrl = new URL('/search', searxngInstance).toString();
+      }
+      logger.info('Constructed search URL:', {
+        original_instance: searxngInstance,
+        final_url: searchUrl
+      });
+    } catch (urlError) {
+      logger.error('Error constructing search URL:', {
+        instance: searxngInstance,
+        error: urlError.message
+      });
+      throw urlError;
     }
     
+    const requestParams = {
+      q: query,
+      format: 'json',
+      categories: 'general',
+      language: 'en-US',
+      time_range: '',
+      engines: 'google,bing,duckduckgo',
+      max_results: numResults
+    };
+
+    logger.info('Preparing search request:', {
+      url: searchUrl,
+      params: requestParams
+    });
+
     const makeRequest = () => axiosInstance.get(searchUrl, {
-      params: {
-        q: query,
-        format: 'json',
-        categories: 'general',
-        language: 'en-US',
-        time_range: '',
-        engines: 'google,bing,duckduckgo',
-        max_results: numResults
-      },
+      params: requestParams,
       validateStatus: status => status >= 200 && status < 300
     });
 
@@ -247,6 +275,11 @@ async function summarizeWebResults(searchResults, originalQuery) {
  */
 async function searchAndSummarize(query, queryInfo = {}) {
   try {
+    logger.info('Starting web search and summarize:', {
+      query,
+      queryInfo
+    });
+
     // Default query info if not provided
     const defaultQueryInfo = {
       query_type: 'general',
@@ -254,6 +287,12 @@ async function searchAndSummarize(query, queryInfo = {}) {
         context_needed: []
       }
     };
+    
+    logger.info('Using query info:', {
+      provided: queryInfo,
+      default: defaultQueryInfo,
+      final: queryInfo || defaultQueryInfo
+    });
     
     const searchResults = await performWebSearch(query, queryInfo || defaultQueryInfo);
     const summary = await summarizeWebResults(searchResults, query);
