@@ -96,10 +96,16 @@ async function performWebSearch(query, queryInfo, numResults = 8) {
     const response = await withRetry(makeRequest);
     const results = response.data.results || [];
     
+    // Log detailed search results
     logger.info('Web search completed:', { 
       query, 
       results_count: results.length,
-      instance: searxngInstance
+      instance: searxngInstance,
+      results: results.map(r => ({
+        title: r.title,
+        url: r.url,
+        snippet: r.content.substring(0, 150) + '...' // Log first 150 chars of content
+      }))
     });
     
     return results.map(result => ({
@@ -202,7 +208,15 @@ async function summarizeWebResults(searchResults, originalQuery) {
     logger.info('Web results summarized:', { 
       query: originalQuery,
       summary_length: result.summary.length,
-      facts_count: result.facts.length
+      facts_count: result.facts.length,
+      summary: result.summary,
+      facts: result.facts,
+      sources: result.source_urls.map(s => ({
+        id: s.id,
+        url: s.url,
+        title: s.title,
+        relevance_score: s.relevance_score
+      }))
     });
     
     return {

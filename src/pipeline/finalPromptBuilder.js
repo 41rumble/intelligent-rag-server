@@ -47,6 +47,14 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     
     // Add web search information if available and relevant
     if (webSummary && webSummary.summary) {
+      // Log web information being used in final prompt
+      logger.info('Using web information in final prompt:', {
+        summary: webSummary.summary,
+        facts: webSummary.facts,
+        sources: webSummary.source_urls,
+        relevance_analysis: webSummary.relevance_analysis
+      });
+      
       context += `
       
       RELEVANT WEB SOURCES:
