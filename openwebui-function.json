@@ -1,0 +1,47 @@
+{
+  "name": "The Great Fire: Researcher",
+  "description": "An intelligent research assistant that helps analyze and understand The Great Fire and related historical events through deep contextual analysis.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "description": "The ID of the project to query against (e.g., 'TheGreatFire')"
+      },
+      "thinkingDepth": {
+        "type": "integer",
+        "description": "Level of processing depth (1-4)",
+        "enum": [1, 2, 3, 4],
+        "default": 2
+      }
+    },
+    "required": ["projectId"]
+  },
+  "examples": [
+    {
+      "name": "Basic Query",
+      "input": {
+        "projectId": "TheGreatFire",
+        "thinkingDepth": 2
+      }
+    },
+    {
+      "name": "Deep Analysis",
+      "input": {
+        "projectId": "TheGreatFire",
+        "thinkingDepth": 4
+      }
+    }
+  ],
+  "api": {
+    "url": "http://localhost:3000/query",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  },
+  "ui": {
+    "thinking_message": "Having a good honest think about it...",
+    "error_message": "I apologize, but I encountered an issue while researching that. Could you try rephrasing your question?"
+  }
+}
