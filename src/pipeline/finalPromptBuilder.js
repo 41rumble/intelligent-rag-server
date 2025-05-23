@@ -216,42 +216,27 @@ async function generateFinalAnswer(finalPrompt) {
       maxTokens: 1500,  // Slightly shorter but more concise answers
       systemPrompt: "You are a JSON-only assistant that always responds with valid JSON."
     });
-      
-      // Validate the response structure
-      if (!parsedResponse.answer?.text || !Array.isArray(parsedResponse.answer?.citations)) {
-        throw new Error('Response missing required fields: answer.text or answer.citations');
-      }
-      
-      if (!parsedResponse.source_analysis || 
-          typeof parsedResponse.source_analysis.book_sources_used !== 'boolean' ||
-          typeof parsedResponse.source_analysis.web_sources_used !== 'boolean' ||
-          !Array.isArray(parsedResponse.source_analysis.missing_information) ||
-          !Array.isArray(parsedResponse.source_analysis.source_conflicts)) {
-        throw new Error('Response missing required source_analysis fields');
-      }
-      
-      // Log successful parsing
-      logger.info('Successfully parsed LLM response:', {
-        text_length: parsedResponse.answer.text.length,
-        citations_count: parsedResponse.answer.citations.length,
-        has_missing_info: parsedResponse.source_analysis.missing_information.length > 0,
-        has_conflicts: parsedResponse.source_analysis.source_conflicts.length > 0
-      });
-      
-    } catch (parseError) {
-      logger.error('Failed to parse LLM response:', {
-        error: parseError.message,
-        response_length: response.length,
-        response_preview: response.slice(0, 200) + '...',
-        stack: parseError.stack
-      });
-      
-      // Do not attempt to salvage non-JSON responses
-      logger.error('Response must be valid JSON. Got:', {
-        response_preview: response.slice(0, 200)
-      });
-      throw parseError;
+    
+    // Validate the response structure
+    if (!parsedResponse.answer?.text || !Array.isArray(parsedResponse.answer?.citations)) {
+      throw new Error('Response missing required fields: answer.text or answer.citations');
     }
+    
+    if (!parsedResponse.source_analysis || 
+        typeof parsedResponse.source_analysis.book_sources_used !== 'boolean' ||
+        typeof parsedResponse.source_analysis.web_sources_used !== 'boolean' ||
+        !Array.isArray(parsedResponse.source_analysis.missing_information) ||
+        !Array.isArray(parsedResponse.source_analysis.source_conflicts)) {
+      throw new Error('Response missing required source_analysis fields');
+    }
+    
+    // Log successful parsing
+    logger.info('Successfully parsed LLM response:', {
+      text_length: parsedResponse.answer.text.length,
+      citations_count: parsedResponse.answer.citations.length,
+      has_missing_info: parsedResponse.source_analysis.missing_information.length > 0,
+      has_conflicts: parsedResponse.source_analysis.source_conflicts.length > 0
+    });
     
     // Remove citations from the answer text
     const cleanAnswer = parsedResponse.answer.text.replace(/\[\w+\d*\]/g, '').replace(/\s+/g, ' ').trim();
