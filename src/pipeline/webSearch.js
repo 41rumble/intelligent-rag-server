@@ -176,12 +176,28 @@ async function performWebSearch(query, queryInfo, numResults = 8) {
  * Quick analysis of a single search result
  */
 async function analyzeSearchResult(result, index, originalQuery) {
-  const prompt = `
-  Quick analysis task for query: "${originalQuery}"
+  // Determine if this is a naval/military query
+  const isNavalQuery = originalQuery.toLowerCase().includes('naval') ||
+                      originalQuery.toLowerCase().includes('ship') ||
+                      originalQuery.toLowerCase().includes('military') ||
+                      originalQuery.toLowerCase().includes('war');
 
-  Content to analyze:
+  // Look for temporal indicators
+  const hasTimeContext = originalQuery.toLowerCase().includes('during') ||
+                        originalQuery.toLowerCase().includes('after') ||
+                        originalQuery.toLowerCase().includes('before') ||
+                        originalQuery.toLowerCase().includes('when');
+
+  const prompt = `
+  Analyze this content for query: "${originalQuery}"
+
+  FOCUS: ${isNavalQuery ? 'Naval/military history query - focus on wartime activities and military operations.' : 'General query'}
+  ${hasTimeContext ? 'TIME CONTEXT: Pay special attention to dates and chronological information.' : ''}
+
+  Content:
   "${result.content}"
 
+  Source:
   Title: ${result.title}
   URL: ${result.url}
 
@@ -190,11 +206,21 @@ async function analyzeSearchResult(result, index, originalQuery) {
     "is_relevant": boolean (true if content helps answer query),
     "relevance_score": number 1-10 (higher = more directly answers query),
     "key_points": [
-      "only facts that directly help answer the query",
-      "no general information",
-      "focus on naval/military involvement"
+      ${isNavalQuery ? 
+        `"specific military operations or activities",
+        "dates and locations of operations",
+        "ship roles and deployments"` :
+        `"facts that directly answer the query",
+        "specific details and context",
+        "relevant background information"`
+      }
     ],
-    "reasoning": "one line explaining relevance"
+    "reasoning": "one line explaining relevance",
+    "temporal_info": {
+      "has_dates": boolean,
+      "time_period": "specific time period mentioned",
+      "chronological_order": boolean
+    }
   }
   `;
 
@@ -204,22 +230,50 @@ async function analyzeSearchResult(result, index, originalQuery) {
       systemPrompt: "You are a quick analysis assistant. Be concise and focus only on relevance to the query."
     });
 
-    return {
+    // Validate and enhance the analysis
+    const enhancedAnalysis = {
       ...analysis,
       result_index: index,
       url: result.url,
-      title: result.title
+      title: result.title,
+      query_type: isNavalQuery ? 'naval/military' : 'general',
+      has_time_context: hasTimeContext,
+      // Add temporal info if available
+      temporal_info: analysis.temporal_info || {
+        has_dates: false,
+        time_period: 'unknown',
+        chronological_order: false
+      }
     };
+
+    // Log analysis results
+    logger.info(`Analysis for result ${index}:`, {
+      title: result.title,
+      is_relevant: enhancedAnalysis.is_relevant,
+      score: enhancedAnalysis.relevance_score,
+      key_points: enhancedAnalysis.key_points.length,
+      has_dates: enhancedAnalysis.temporal_info.has_dates
+    });
+
+    return enhancedAnalysis;
   } catch (error) {
     logger.warn(`Failed to analyze result ${index}`, { error: error.message });
     return {
       is_relevant: false,
       relevance_score: 0,
       key_points: [],
-      reasoning: "Analysis failed",
+      reasoning: "Analysis failed: " + error.message,
       result_index: index,
       url: result.url,
-      title: result.title
+      title: result.title,
+      query_type: isNavalQuery ? 'naval/military' : 'general',
+      has_time_context: hasTimeContext,
+      temporal_info: {
+        has_dates: false,
+        time_period: 'unknown',
+        chronological_order: false
+      },
+      error: error.message
     };
   }
 }
@@ -297,24 +351,42 @@ async function summarizeWebResults(searchResults, originalQuery) {
     allRelevantAnalyses.sort((a, b) => b.relevance_score - a.relevance_score);
     const topResults = allRelevantAnalyses.slice(0, 5); // Only use top 5 most relevant
 
+    // Determine if this is a naval/military query
+    const isNavalQuery = originalQuery.toLowerCase().includes('naval') ||
+                        originalQuery.toLowerCase().includes('ship') ||
+                        originalQuery.toLowerCase().includes('military') ||
+                        originalQuery.toLowerCase().includes('war');
+
+    logger.info('Query analysis:', {
+      query: originalQuery,
+      is_naval_query: isNavalQuery,
+      top_results: topResults.length,
+      relevance_scores: topResults.map(r => r.relevance_score)
+    });
+
     // Second pass: Synthesize top relevant results
     const combinedPrompt = `
     Query: "${originalQuery}"
 
-    Synthesize these key points:
+    FOCUS: ${isNavalQuery ? 'This is a naval/military history query. Focus on wartime activities, military operations, and ship deployments.' : 'General query'}
+
+    Synthesize these sources:
     ${topResults.map(a => `
     [WEB${a.result_index}] ${a.title}
+    Relevance: ${a.relevance_score}/10 - ${a.reasoning}
+    Key Points:
     ${a.key_points.map(p => `* ${p}`).join('\n')}
     `).join('\n\n')}
 
-    Return ONLY a JSON object with:
+    Return ONLY a JSON object with this structure:
     {
-      "summary": "Focused answer with [WEB1] style citations",
+      "summary": "Direct answer with [WEB1] style citations. ${isNavalQuery ? 'Focus on military operations and wartime activities.' : ''}",
       "facts": [
         {
-          "text": "Specific fact about naval/military involvement",
+          "text": "${isNavalQuery ? 'Specific fact about naval/military operations or wartime activities' : 'Specific fact that helps answer the query'}",
           "relevance": "How this fact answers the query",
-          "sources": [1, 2] // Source numbers
+          "sources": [1, 2],
+          "confidence": "high/medium/low based on source agreement"
         }
       ],
       "source_urls": [
@@ -324,8 +396,16 @@ async function summarizeWebResults(searchResults, originalQuery) {
           "title": "source title",
           "relevance_score": 1-10
         }
-      ]
+      ],
+      "relevance_analysis": "Brief analysis of how well sources answer the query"
     }
+
+    REQUIREMENTS:
+    1. Every fact must have [WEB1] style citations
+    2. Focus on ${isNavalQuery ? 'military operations, wartime activities, and ship deployments' : 'directly answering the query'}
+    3. Include specific dates and locations when available
+    4. Note any conflicting information between sources
+    5. Only include highly relevant information
     `;
 
     try {
