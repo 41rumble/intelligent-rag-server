@@ -158,7 +158,7 @@ async function generateCompletion(prompt, options = {}) {
         messages,
         options: {
           temperature,
-          num_predict: maxTokens
+          num_predict: 0 // No token limit - stream until complete
         },
         stream: true
       });
@@ -242,8 +242,8 @@ CRITICAL REQUIREMENTS:
 3. NO text before or after the JSON
 4. NO markdown code blocks
 5. NO explanations or comments
-6. Keep the response concise and focused
-7. If the response would be too long, focus on the most relevant information
+6. Include ALL relevant information - don't worry about length
+7. Make sure the JSON is complete and properly closed
 
 TASK:
 ${prompt}
@@ -258,7 +258,7 @@ Remember: ONLY the JSON object, nothing else.`;
     const response = await generateCompletion(jsonPrompt, {
       ...options,
       temperature: options.temperature || 0.1, // Very low temperature for structured output
-      maxTokens: Math.min(options.maxTokens || 2000, 4000) // Ensure reasonable token limit
+      maxTokens: 0 // No token limit - let it generate as much as needed
     });
     
     // Clean the response and handle potential truncation
