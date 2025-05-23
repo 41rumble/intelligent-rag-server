@@ -39,32 +39,52 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
         (typeof s.relevance === 'number' && s.relevance >= 7)
       ));
     
+    // Determine if this is a book-focused or web-focused query
+    const isWebFocused = queryInfo.original_query.toLowerCase().includes('not related to') || 
+                        queryInfo.original_query.toLowerCase().includes('other than') ||
+                        queryInfo.original_query.toLowerCase().includes('outside of');
+
+    logger.info('Query focus analysis:', {
+      query: queryInfo.original_query,
+      is_web_focused: isWebFocused,
+      has_book_data: compressedKnowledge.source_snippets.length > 0,
+      has_web_data: !!webSummary?.summary
+    });
+
     // Base context with more structured information
     let context = `
     QUERY INFORMATION:
     - Original Query: "${queryInfo.original_query}"
     - Project ID: "${queryInfo.project_id}"
     - Query Type: ${queryInfo.query_type || 'General'}
-    - Query Focus: ${queryInfo.focus || 'Not specified'}
+    - Query Focus: ${isWebFocused ? 'Information outside book context' : queryInfo.focus || 'Not specified'}
     
-    ${compressedKnowledge.source_snippets.length > 0 ? `
-    BOOK SOURCES:
-    ${compressedKnowledge.source_snippets.map(snippet => 
-      `[${snippet.id}] From ${snippet.source}:
-      "${snippet.text}"
-      Relevance: ${snippet.relevance}`
-    ).join('\n\n')}
-    
-    ${compressedKnowledge.key_points.length > 0 ? `
-    KEY POINTS FROM BOOKS:
-    ${compressedKnowledge.key_points.map((point, i) => `[KP${i+1}] ${point}`).join('\n')}
-    ` : ''}
-    ` : `
-    NOTE: No information found in the book sources for this query.
-    ${webSummary?.summary ? 
-      'The answer will be based on web sources.' : 
-      'No relevant information was found in either book or web sources. Please acknowledge this in your response.'}
-    `}
+    ${isWebFocused ? 
+      // For web-focused queries, put web data first if available
+      (webSummary?.summary ? 
+        `NOTE: This query asks about events/information OUTSIDE the book's context.
+        The answer will primarily use web sources, with book sources for context only.` :
+        `NOTE: This query asks about events/information OUTSIDE the book's context,
+        but no relevant web information was found.`) :
+      // For book-focused queries, normal handling
+      (compressedKnowledge.source_snippets.length > 0 ? `
+        BOOK SOURCES:
+        ${compressedKnowledge.source_snippets.map(snippet => 
+          `[${snippet.id}] From ${snippet.source}:
+          "${snippet.text}"
+          Relevance: ${snippet.relevance}`
+        ).join('\n\n')}
+        
+        ${compressedKnowledge.key_points.length > 0 ? `
+        KEY POINTS FROM BOOKS:
+        ${compressedKnowledge.key_points.map((point, i) => `[KP${i+1}] ${point}`).join('\n')}
+        ` : ''}
+      ` : `
+        NOTE: No information found in the book sources for this query.
+        ${webSummary?.summary ? 
+          'The answer will be based on web sources.' : 
+          'No relevant information was found in either book or web sources. Please acknowledge this in your response.'}
+      `)}
     `;
     
     // Add web search information if available and relevant
@@ -72,31 +92,38 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
       // Log web information being used in final prompt
       logger.info('Using web information in final prompt:', {
         summary: webSummary.summary,
-        facts: webSummary.facts,
-        sources: webSummary.source_urls,
-        relevance_analysis: webSummary.relevance_analysis
+        facts: webSummary.facts?.length || 0,
+        sources: webSummary.source_urls?.length || 0,
+        is_web_focused: isWebFocused
       });
+      
+      // For web-focused queries, we want to prioritize web information
+      const relevantSources = webSummary.source_urls
+        ?.filter(url => isWebFocused ? url.relevance_score >= 5 : url.relevance_score >= 7) || [];
+      
+      const relevantFacts = webSummary.facts
+        ?.filter(fact => fact.relevance && 
+          (isWebFocused ? true : fact.relevance.toLowerCase().includes('high'))) || [];
       
       context += `
       
-      RELEVANT WEB SOURCES:
-      ${webSummary.relevance_analysis}
+      ${isWebFocused ? 'PRIMARY WEB SOURCES:' : 'RELEVANT WEB SOURCES:'}
+      ${webSummary.relevance_analysis || 'No relevance analysis available.'}
       
-      HIGHLY RELEVANT WEB INFORMATION:
-      ${webSummary.source_urls
-        .filter(url => url.relevance_score >= 7) // Only include highly relevant sources
-        .map((url, i) => 
-          `[${url.id}] From ${url.title} (Relevance: ${url.relevance_score}/10):
-          "${webSummary.facts.find(f => f.sources.includes(i+1))?.text || ''}"
-          Relevance: ${webSummary.facts.find(f => f.sources.includes(i+1))?.relevance || ''}`
-        ).join('\n\n')}
+      ${isWebFocused ? 'MAIN INFORMATION FROM WEB:' : 'HIGHLY RELEVANT WEB INFORMATION:'}
+      ${relevantSources
+        .map((url, i) => {
+          const relatedFact = webSummary.facts?.find(f => f.sources.includes(i+1));
+          return `[${url.id}] From ${url.title} (Relevance: ${url.relevance_score}/10):
+          "${relatedFact?.text || ''}"
+          ${isWebFocused ? 'Context: ' : 'Relevance: '}${relatedFact?.relevance || ''}`
+        }).join('\n\n')}
       
-      SUPPORTING WEB FACTS:
-      ${webSummary.facts
-        .filter(fact => fact.relevance) // Only include facts with explicit relevance
+      ${isWebFocused ? 'ADDITIONAL DETAILS:' : 'SUPPORTING WEB FACTS:'}
+      ${relevantFacts
         .map(fact => 
           `[${fact.sources.map(s => `WEB${s}`).join('][')}] ${fact.text}
-          Why relevant: ${fact.relevance}`
+          ${isWebFocused ? 'Context: ' : 'Why relevant: '}${fact.relevance}`
         ).join('\n')}
       `;
     }
