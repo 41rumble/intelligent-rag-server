@@ -177,23 +177,25 @@ async function performWebSearch(query, queryInfo, numResults = 8) {
  */
 async function analyzeSearchResult(result, index, originalQuery) {
   const prompt = `
-  Analyze this search result for the query: "${originalQuery}"
+  Quick analysis task for query: "${originalQuery}"
 
-  RESULT:
+  Content to analyze:
+  "${result.content}"
+
   Title: ${result.title}
   URL: ${result.url}
-  Content: ${result.content}
 
-  Quickly determine:
-  1. Is this result relevant to the query?
-  2. What specific information helps answer the query?
-  3. Rate relevance from 1-10
-
-  Format response as JSON with:
-  - is_relevant: boolean
-  - relevance_score: number 1-10
-  - key_points: Array of short, relevant facts (empty if not relevant)
-  - reasoning: Brief explanation of relevance/irrelevance
+  Return ONLY a JSON object with:
+  {
+    "is_relevant": boolean (true if content helps answer query),
+    "relevance_score": number 1-10 (higher = more directly answers query),
+    "key_points": [
+      "only facts that directly help answer the query",
+      "no general information",
+      "focus on naval/military involvement"
+    ],
+    "reasoning": "one line explaining relevance"
+  }
   `;
 
   try {
@@ -238,22 +240,52 @@ async function summarizeWebResults(searchResults, originalQuery) {
       };
     }
 
-    // First pass: Quick analysis of each result
-    logger.info('Starting individual result analysis');
-    const analysisPromises = searchResults.map((result, index) => 
-      analyzeSearchResult(result, index + 1, originalQuery)
-    );
-    const analyses = await Promise.all(analysisPromises);
+    // Process results in batches of 3
+    const BATCH_SIZE = 3;
+    const batches = [];
+    for (let i = 0; i < searchResults.length; i += BATCH_SIZE) {
+      batches.push(searchResults.slice(i, i + BATCH_SIZE));
+    }
 
-    // Filter relevant results
-    const relevantAnalyses = analyses.filter(a => a.is_relevant && a.relevance_score > 3);
-    logger.info('Relevant results found:', {
-      total: searchResults.length,
-      relevant: relevantAnalyses.length,
-      scores: relevantAnalyses.map(a => a.relevance_score)
+    logger.info('Processing search results in batches:', {
+      total_results: searchResults.length,
+      batch_size: BATCH_SIZE,
+      num_batches: batches.length
     });
 
-    if (relevantAnalyses.length === 0) {
+    // Process each batch
+    let allRelevantAnalyses = [];
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i];
+      logger.info(`Processing batch ${i + 1}/${batches.length}`);
+
+      // Analyze batch
+      const batchAnalyses = await Promise.all(
+        batch.map((result, idx) => 
+          analyzeSearchResult(result, i * BATCH_SIZE + idx + 1, originalQuery)
+        )
+      );
+
+      // Filter relevant results from this batch
+      const relevantFromBatch = batchAnalyses.filter(a => a.is_relevant && a.relevance_score > 3);
+      allRelevantAnalyses.push(...relevantFromBatch);
+
+      logger.info(`Batch ${i + 1} analysis:`, {
+        batch_size: batch.length,
+        relevant_found: relevantFromBatch.length,
+        scores: relevantFromBatch.map(a => a.relevance_score)
+      });
+    }
+
+    logger.info('All batches processed:', {
+      total_analyzed: searchResults.length,
+      total_relevant: allRelevantAnalyses.length,
+      avg_score: allRelevantAnalyses.length > 0 
+        ? allRelevantAnalyses.reduce((sum, a) => sum + a.relevance_score, 0) / allRelevantAnalyses.length 
+        : 0
+    });
+
+    if (allRelevantAnalyses.length === 0) {
       return {
         summary: 'No relevant web search results found.',
         facts: [],
@@ -261,35 +293,39 @@ async function summarizeWebResults(searchResults, originalQuery) {
       };
     }
 
-    // Second pass: Combine relevant information
+    // Sort by relevance and take top results
+    allRelevantAnalyses.sort((a, b) => b.relevance_score - a.relevance_score);
+    const topResults = allRelevantAnalyses.slice(0, 5); // Only use top 5 most relevant
+
+    // Second pass: Synthesize top relevant results
     const combinedPrompt = `
-    Synthesize these relevant search results for the query: "${originalQuery}"
+    Query: "${originalQuery}"
 
-    RELEVANT FINDINGS:
-    ${relevantAnalyses.map(a => `
+    Synthesize these key points:
+    ${topResults.map(a => `
     [WEB${a.result_index}] ${a.title}
-    Relevance: ${a.relevance_score}/10
-    Key Points:
-    ${a.key_points.map(p => `- ${p}`).join('\n')}
-    `).join('\n')}
+    ${a.key_points.map(p => `* ${p}`).join('\n')}
+    `).join('\n\n')}
 
-    Create a comprehensive answer that:
-    1. Combines related information
-    2. Resolves any contradictions
-    3. Uses [WEB1], [WEB2] etc. citations
-    4. Focuses on answering the original query
-
-    Format response as JSON with:
-    - summary: A coherent paragraph with citations
-    - facts: Array of objects with:
-      * text: The factual statement
-      * relevance: How it helps answer the query
-      * sources: Array of source numbers
-    - source_urls: Array of objects with:
-      * id: "WEB1", "WEB2", etc.
-      * url: The source URL
-      * title: The source title
-      * relevance_score: 1-10 rating
+    Return ONLY a JSON object with:
+    {
+      "summary": "Focused answer with [WEB1] style citations",
+      "facts": [
+        {
+          "text": "Specific fact about naval/military involvement",
+          "relevance": "How this fact answers the query",
+          "sources": [1, 2] // Source numbers
+        }
+      ],
+      "source_urls": [
+        {
+          "id": "WEB1",
+          "url": "source url",
+          "title": "source title",
+          "relevance_score": 1-10
+        }
+      ]
+    }
     `;
 
     const response = await generateStructuredResponse(combinedPrompt, {
