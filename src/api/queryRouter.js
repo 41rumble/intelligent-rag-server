@@ -1,5 +1,6 @@
 const express = require('express');
 const logger = require('../utils/logger');
+const { handlePipelineError } = require('../utils/errorHandler');
 const { expandQuery } = require('../pipeline/queryExpander');
 const { retrieveDocuments } = require('../pipeline/documentRetriever');
 const { searchAndSummarize } = require('../pipeline/webSearch');
@@ -222,11 +223,15 @@ router.post('/', async (req, res) => {
       log: responseLog
     });
   } catch (error) {
-    logger.error('Error processing query:', error);
-    return res.status(500).json({
-      error: 'Failed to process query',
-      message: error.message
+    const errorResponse = handlePipelineError(error, {
+      query,
+      projectId,
+      expandedQueries,
+      uniqueDocs,
+      webResults,
+      processedContext
     });
+    return res.status(500).json(errorResponse);
   }
 });
 
