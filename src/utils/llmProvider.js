@@ -151,16 +151,25 @@ async function generateCompletion(prompt, options = {}) {
       
       messages.push({ role: 'user', content: prompt });
       
-      const response = await ollamaClient.chat({
+      // For Ollama, we need to handle streaming to get complete responses
+      let fullResponse = '';
+      const stream = await ollamaClient.chat({
         model: OLLAMA_LLM_MODEL,
         messages,
         options: {
           temperature,
           num_predict: maxTokens
-        }
+        },
+        stream: true
       });
-      
-      return response.message.content;
+
+      for await (const part of stream) {
+        if (part.message?.content) {
+          fullResponse += part.message.content;
+        }
+      }
+
+      return fullResponse;
     }
   } catch (error) {
     logger.error('Error generating completion:', error);
@@ -227,27 +236,49 @@ async function generateStructuredResponse(prompt, options = {}) {
     // For Ollama, we need to explicitly request JSON in the prompt
     const jsonPrompt = `You are a JSON-only assistant. You must respond with ONLY valid JSON.
 
+CRITICAL REQUIREMENTS:
+1. Response must be ONLY valid JSON
+2. Start with { and end with }
+3. NO text before or after the JSON
+4. NO markdown code blocks
+5. NO explanations or comments
+6. Keep the response concise and focused
+7. If the response would be too long, focus on the most relevant information
+
 TASK:
 ${prompt}
 
-CRITICAL: Response must be valid JSON only. Start with { and end with }. No other text.`;
+Remember: ONLY the JSON object, nothing else.`;
 
     // Add system prompt if not provided
     if (!options.systemPrompt) {
-      options.systemPrompt = "You are a JSON-only assistant. Never include any text outside the JSON structure.";
+      options.systemPrompt = "You are a JSON-only assistant that always responds with valid JSON. Never include any text outside the JSON structure.";
     }
     
     const response = await generateCompletion(jsonPrompt, {
       ...options,
-      temperature: options.temperature || 0.1 // Very low temperature for structured output
+      temperature: options.temperature || 0.1, // Very low temperature for structured output
+      maxTokens: Math.min(options.maxTokens || 2000, 4000) // Ensure reasonable token limit
     });
     
-    // Clean the response - just remove whitespace and code fences
-    const cleanedResponse = response
+    // Clean the response and handle potential truncation
+    let cleanedResponse = response
       .trim()
-      .replace(/^[\s\n]*```[^\n]*\n/, '')
-      .replace(/\n```[\s\n]*$/, '')
+      .replace(/^[\s\n]*```[^\n]*\n/, '')  // Remove opening code fence
+      .replace(/\n```[\s\n]*$/, '')         // Remove closing code fence
       .trim();
+      
+    // If response appears truncated, try to find complete JSON
+    if (cleanedResponse.split('{').length !== cleanedResponse.split('}').length) {
+      logger.warn('Response appears truncated, attempting to extract complete JSON');
+      const extracted = extractJsonString(cleanedResponse);
+      if (extracted) {
+        cleanedResponse = extracted;
+      } else {
+        logger.error('Could not find complete JSON in truncated response');
+        throw new Error('Incomplete JSON response from Ollama');
+      }
+    }
     
     try {
       return JSON.parse(cleanedResponse);
