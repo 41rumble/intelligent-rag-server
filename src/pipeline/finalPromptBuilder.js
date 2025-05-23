@@ -129,16 +129,19 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     5. No comments in the JSON
 
     CITATION REQUIREMENTS:
-    1. Every factual statement must have a citation
-    2. Citations must be in [brackets] and placed at the end of the relevant sentence
+    1. Every factual statement must have a citation in the citations array
+    2. Citations in the text should use [source_id] format
     3. Multiple sources use format: [WEB1][bio_2]
-    4. All citations must be listed in the citations array
-    5. Citations must match the source IDs from the provided context
+    4. Each citation must reference a source from the provided context
+    5. The citations array must include ALL sources used, with explanations
+    
+    Note: The citations will be removed from the displayed answer text,
+    but are required to track which facts came from which sources.
 
     EXAMPLE RESPONSE:
     {
       "answer": {
-        "text": "The HMS Victory was launched in 1765 [WEB1] and served as Lord Nelson's flagship at the Battle of Trafalgar [WEB2]. After years of active service, she was moved to dry dock in Portsmouth in 1922 [WEB3][bio_4] where she remains today as a museum ship.",
+        "text": "The HMS Victory was launched in 1765 [WEB1] and served as Lord Nelson's flagship at the Battle of Trafalgar [WEB2]. After years of active service, she was moved to dry dock in Portsmouth in 1922 [WEB3][bio_4] where she remains today as a museum ship. (Note: These citations will be removed from the displayed text but are needed to track sources)",
         "citations": [
           {
             "id": "WEB1",
@@ -149,6 +152,16 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
             "id": "WEB2",
             "source": "Battle Records",
             "relevance": "Details of Trafalgar engagement"
+          },
+          {
+            "id": "WEB3",
+            "source": "Preservation Records",
+            "relevance": "Documentation of dry dock transfer"
+          },
+          {
+            "id": "bio_4",
+            "source": "Ship's historical record",
+            "relevance": "Corroborating evidence for preservation status"
           }
         ]
       },
@@ -263,9 +276,12 @@ async function generateFinalAnswer(finalPrompt) {
       throw parseError;
     }
     
-    // Format the final answer with citations
+    // Remove citations from the answer text
+    const cleanAnswer = parsedResponse.answer.text.replace(/\[\w+\d*\]/g, '').replace(/\s+/g, ' ').trim();
+    
+    // Format the final answer without citations in the text
     const formattedAnswer = `
-${parsedResponse.answer.text}
+${cleanAnswer}
 
 Sources:
 ${parsedResponse.answer.citations.map(citation => 
