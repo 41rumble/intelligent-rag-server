@@ -34,24 +34,6 @@ router.post('/', async (req, res) => {
 
     logger.info('Starting query processing:', { projectId, query });
 
-    // Send initial progress
-    res.write(Buffer.from(JSON.stringify({
-      type: 'progress',
-      data: {
-        steps: [
-          {
-            id: 'query_expansion',
-            status: 'in_progress',
-            message: 'Analyzing query and generating search variations',
-            details: 'Starting query analysis...'
-          }
-        ],
-        current_step: 'query_expansion',
-        total_steps: 5,
-        completed_steps: 0
-      }
-    }) + '\n', 'utf8'));
-
     // Step 1: Generate similar queries to expand search coverage
     const expandedQueries = await expandQuery(query, 3);
     logger.info('Generated similar queries:', { 
@@ -59,30 +41,6 @@ router.post('/', async (req, res) => {
       expanded: expandedQueries,
       total: expandedQueries.length + 1 
     });
-
-    // Update progress for document search
-    res.write(Buffer.from(JSON.stringify({
-      type: 'progress',
-      data: {
-        steps: [
-          {
-            id: 'query_expansion',
-            status: 'completed',
-            message: 'Query analysis complete',
-            details: `Found ${expandedQueries.length} similar queries`
-          },
-          {
-            id: 'document_search',
-            status: 'in_progress',
-            message: 'Searching book content',
-            details: 'Starting document search...'
-          }
-        ],
-        current_step: 'document_search',
-        total_steps: 5,
-        completed_steps: 1
-      }
-    }) + '\n', 'utf8'));
 
     // Step 2: Search documents with all queries
     const allQueries = [query, ...expandedQueries];
@@ -105,36 +63,6 @@ router.post('/', async (req, res) => {
       sources: uniqueDocs.map(d => d.source)
     });
 
-    // Update progress for web search
-    res.write(Buffer.from(JSON.stringify({
-      type: 'progress',
-      data: {
-        steps: [
-          {
-            id: 'query_expansion',
-            status: 'completed',
-            message: 'Query analysis complete',
-            details: `Found ${expandedQueries.length} similar queries`
-          },
-          {
-            id: 'document_search',
-            status: 'completed',
-            message: 'Book content search complete',
-            details: `Found ${uniqueDocs.length} relevant passages`
-          },
-          {
-            id: 'web_search',
-            status: 'in_progress',
-            message: 'Searching web resources',
-            details: 'Starting web search...'
-          }
-        ],
-        current_step: 'web_search',
-        total_steps: 5,
-        completed_steps: 2
-      }
-    }) + '\n', 'utf8'));
-
     // Step 3: Get relevant web content
     const webQuery = `${query} book:"${projectId}"`;
     const webResults = await searchAndSummarize(webQuery);
@@ -142,42 +70,6 @@ router.post('/', async (req, res) => {
       hasResults: !!webResults,
       summaryLength: webResults?.summary?.length || 0
     });
-
-    // Update progress for context processing
-    res.write(Buffer.from(JSON.stringify({
-      type: 'progress',
-      data: {
-        steps: [
-          {
-            id: 'query_expansion',
-            status: 'completed',
-            message: 'Query analysis complete',
-            details: `Found ${expandedQueries.length} similar queries`
-          },
-          {
-            id: 'document_search',
-            status: 'completed',
-            message: 'Book content search complete',
-            details: `Found ${uniqueDocs.length} relevant passages`
-          },
-          {
-            id: 'web_search',
-            status: 'completed',
-            message: 'Web search complete',
-            details: webResults ? `Found ${webResults.source_urls.length} relevant web sources` : 'No web sources needed'
-          },
-          {
-            id: 'context_processing',
-            status: 'in_progress',
-            message: 'Processing and combining information',
-            details: 'Analyzing and synthesizing content...'
-          }
-        ],
-        current_step: 'context_processing',
-        total_steps: 5,
-        completed_steps: 3
-      }
-    }) + '\n', 'utf8'));
 
     // Step 4: Process all context
     const processedContext = await handleOversizedContext([
@@ -194,48 +86,6 @@ router.post('/', async (req, res) => {
       keyPoints: processedContext.key_points.length,
       sources: processedContext.source_ids.length
     });
-
-    // Update progress for answer generation
-    res.write(Buffer.from(JSON.stringify({
-      type: 'progress',
-      data: {
-        steps: [
-          {
-            id: 'query_expansion',
-            status: 'completed',
-            message: 'Query analysis complete',
-            details: `Found ${expandedQueries.length} similar queries`
-          },
-          {
-            id: 'document_search',
-            status: 'completed',
-            message: 'Book content search complete',
-            details: `Found ${uniqueDocs.length} relevant passages`
-          },
-          {
-            id: 'web_search',
-            status: 'completed',
-            message: 'Web search complete',
-            details: webResults ? `Found ${webResults.source_urls.length} relevant web sources` : 'No web sources needed'
-          },
-          {
-            id: 'context_processing',
-            status: 'completed',
-            message: 'Content processing complete',
-            details: `Processed ${processedContext.key_points.length} key points`
-          },
-          {
-            id: 'answer_generation',
-            status: 'in_progress',
-            message: 'Generating final answer',
-            details: 'Crafting response...'
-          }
-        ],
-        current_step: 'answer_generation',
-        total_steps: 5,
-        completed_steps: 4
-      }
-    }) + '\n', 'utf8'));
 
     // Step 5: Generate final answer with citations
     const finalPrompt = `
@@ -271,7 +121,7 @@ router.post('/', async (req, res) => {
     "Asa Jennings arrived in Smyrna in August 1922. During the Great Fire, he worked with both Greek and Turkish authorities to coordinate evacuation efforts."
     `;
 
-    // Format source snippets before starting answer generation
+    // Format source snippets
     let formattedSnippets = processedContext.source_snippets.map(snippet => {
       // Generate a meaningful ID based on the source type and content
       let sourceId;
@@ -302,7 +152,7 @@ router.post('/', async (req, res) => {
       };
     });
 
-    // Format web sources before starting answer generation
+    // Format web sources
     let webSources = webResults ? webResults.source_urls.map((url, index) => {
       const urlObj = typeof url === 'string' ? { url } : url;
       const domain = new URL(urlObj.url).hostname.replace('www.', '');
@@ -320,26 +170,65 @@ router.post('/', async (req, res) => {
       };
     }) : [];
 
-    // Send source snippets first
+    // Generate answer with streaming
+    let answer = '';
+    let answerBuffer = '';
+    
+    // Send initial message with source snippets
     res.write(Buffer.from(JSON.stringify({
-      type: 'answer_progress',
+      type: 'response',
       data: {
         text: '',
         complete: false,
-        source_snippets: [...formattedSnippets, ...webSources]
+        source_snippets: [...formattedSnippets, ...webSources],
+        progress: {
+          current_step: 'answer_generation',
+          total_steps: 5,
+          completed_steps: 4,
+          steps: [
+            {
+              id: 'query_expansion',
+              status: 'completed',
+              message: 'Query analysis complete',
+              details: `Found ${expandedQueries.length} similar queries`
+            },
+            {
+              id: 'document_search',
+              status: 'completed',
+              message: 'Book content search complete',
+              details: `Found ${uniqueDocs.length} relevant passages`
+            },
+            {
+              id: 'web_search',
+              status: 'completed',
+              message: 'Web search complete',
+              details: webResults ? `Found ${webResults.source_urls.length} relevant web sources` : 'No web sources needed'
+            },
+            {
+              id: 'context_processing',
+              status: 'completed',
+              message: 'Content processing complete',
+              details: `Processed ${processedContext.key_points.length} key points`
+            },
+            {
+              id: 'answer_generation',
+              status: 'in_progress',
+              message: 'Generating final answer',
+              details: 'Crafting response...'
+            }
+          ]
+        }
       }
     }) + '\n', 'utf8'));
 
     // Generate answer with streaming
-    let answer = '';
-    let answerBuffer = '';
     answer = await generateFinalAnswer(finalPrompt, (chunk) => {
       // Append chunk to buffer
       answerBuffer += chunk;
       
       // Send answer progress
       res.write(Buffer.from(JSON.stringify({
-        type: 'answer_progress',
+        type: 'response',
         data: {
           text: chunk,
           complete: false
@@ -409,38 +298,41 @@ router.post('/', async (req, res) => {
         ).join('\n')
     );
 
-    // Send final answer completion with everything
+    // Send final completion
     res.write(Buffer.from(JSON.stringify({
-      type: 'answer_progress',
+      type: 'response',
       data: {
         text: '',
         complete: true,
         answer: answer.trim(),
         log: responseLog,
-        final_progress: {
+        progress: {
+          current_step: 'completed',
+          total_steps: 5,
+          completed_steps: 5,
           steps: [
             {
               id: 'query_expansion',
               status: 'completed',
-              message: 'Analyzing query and generating search variations',
+              message: 'Query analysis complete',
               details: `Found ${expandedQueries.length} similar queries`
             },
             {
               id: 'document_search',
               status: 'completed',
-              message: 'Searching book content',
+              message: 'Book content search complete',
               details: `Found ${uniqueDocs.length} relevant passages`
             },
             {
               id: 'web_search',
               status: 'completed',
-              message: 'Searching web resources',
+              message: 'Web search complete',
               details: webResults ? `Found ${webResults.source_urls.length} relevant web sources` : 'No web sources needed'
             },
             {
               id: 'context_processing',
               status: 'completed',
-              message: 'Processing and combining information',
+              message: 'Content processing complete',
               details: `Processed ${processedContext.key_points.length} key points`
             },
             {
@@ -449,10 +341,7 @@ router.post('/', async (req, res) => {
               message: 'Generating final answer',
               details: `Generated ${answer.length} character response`
             }
-          ],
-          current_step: 'completed',
-          total_steps: 5,
-          completed_steps: 5
+          ]
         }
       }
     }) + '\n', 'utf8'));
