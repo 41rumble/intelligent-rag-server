@@ -36,18 +36,29 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     ${compressedKnowledge.key_points.map((point, i) => `[KP${i+1}] ${point}`).join('\n')}
     `;
     
-    // Add web search information if available
+    // Add web search information if available and relevant
     if (webSummary && webSummary.summary) {
       context += `
       
-      ADDITIONAL WEB SOURCES:
-      ${webSummary.source_urls.map((url, i) => 
-        `[WEB${i+1}] From ${url}:
-        "${webSummary.summaries[i]}"`
-      ).join('\n\n')}
+      RELEVANT WEB SOURCES:
+      ${webSummary.relevance_analysis}
       
-      ADDITIONAL FACTS:
-      ${webSummary.facts.map((fact, i) => `[WEB${i+1}] ${fact}`).join('\n')}
+      HIGHLY RELEVANT WEB INFORMATION:
+      ${webSummary.source_urls
+        .filter(url => url.relevance_score >= 7) // Only include highly relevant sources
+        .map((url, i) => 
+          `[${url.id}] From ${url.title} (Relevance: ${url.relevance_score}/10):
+          "${webSummary.facts.find(f => f.sources.includes(i+1))?.text || ''}"
+          Relevance: ${webSummary.facts.find(f => f.sources.includes(i+1))?.relevance || ''}`
+        ).join('\n\n')}
+      
+      SUPPORTING WEB FACTS:
+      ${webSummary.facts
+        .filter(fact => fact.relevance) // Only include facts with explicit relevance
+        .map(fact => 
+          `[${fact.sources.map(s => `WEB${s}`).join('][')}] ${fact.text}
+          Why relevant: ${fact.relevance}`
+        ).join('\n')}
       `;
     }
     

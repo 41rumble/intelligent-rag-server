@@ -154,29 +154,39 @@ async function summarizeWebResults(searchResults, originalQuery) {
     ).join('\n\n');
     
     const prompt = `
-    Summarize the following web search results for the query: "${originalQuery}"
+    Analyze the following web search results for the query: "${originalQuery}"
     
     SEARCH RESULTS:
     ${formattedResults}
     
-    Create a concise summary that:
-    1. Extracts key facts relevant to the query
-    2. Resolves any contradictions between sources
-    3. Provides accurate, factual information
-    4. Uses [WEB1], [WEB2], etc. to cite sources
+    First, evaluate each search result's relevance to the original query:
+    1. How directly does it address the query?
+    2. Does it provide unique, valuable information?
+    3. Is it from a reliable source?
+    
+    Then, for ONLY the relevant results that help answer the query:
+    1. Extract key facts that specifically address the query
+    2. Resolve any contradictions between sources
+    3. Provide accurate, factual information
+    4. Use [WEB1], [WEB2], etc. to cite sources
     
     Example format:
-    "Asa Jennings arrived in Smyrna in August 1922 [WEB1]. During the Great Fire, he worked with both Greek and Turkish authorities [WEB2][WEB3] to coordinate evacuation efforts."
+    "After evaluating the sources, results 1, 3, and 4 directly address the query. Result 2 is off-topic, and result 5 is too general.
+    
+    Relevant information: Asa Jennings arrived in Smyrna in August 1922 [WEB1]. During the Great Fire, he worked with both Greek and Turkish authorities [WEB3][WEB4] to coordinate evacuation efforts."
     
     Format your response as a JSON object with:
-    - summary: A coherent paragraph with [WEB1], [WEB2] etc. citations
+    - relevance_analysis: A brief explanation of which results were relevant and why
+    - summary: A coherent paragraph with [WEB1], [WEB2] etc. citations (ONLY including relevant information)
     - facts: Array of objects with:
-      * text: The factual statement
+      * text: The factual statement that helps answer the query
+      * relevance: Brief explanation of how this fact helps answer the query
       * sources: Array of source numbers (1, 2, etc.)
     - source_urls: Array of objects with:
       * id: "WEB1", "WEB2", etc.
       * url: The source URL
       * title: The source title
+      * relevance_score: 1-10 rating of how relevant this source is to the query
     `;
 
     const result = await generateStructuredResponse(prompt, {
