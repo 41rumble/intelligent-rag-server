@@ -429,7 +429,6 @@ async function summarizeWebResults(searchResults, originalQuery) {
         ? allRelevantAnalyses.reduce((sum, a) => sum + a.relevance_score, 0) / allRelevantAnalyses.length 
         : 0
     });
-    }
 
     logger.info('All batches processed:', {
       total_analyzed: searchResults.length,
