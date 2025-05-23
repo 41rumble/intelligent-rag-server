@@ -59,7 +59,12 @@ async function withRetry(requestFn, retries = MAX_RETRIES) {
  * @param {number} numResults - Number of results to return
  * @returns {Promise<Array>} Search results
  */
-async function performWebSearch(query, numResults = 5) {
+async function performWebSearch(query, queryInfo, numResults = 8) {
+  // Increase results when query is factual or RAG might lack info
+  if (queryInfo.query_type === 'factual' || 
+      queryInfo.analytical_requirements.context_needed.includes('factual')) {
+    numResults = 12; // Get more results for factual queries
+  }
   try {
     if (!searxngInstance) {
       logger.warn('SearXNG instance URL not configured');

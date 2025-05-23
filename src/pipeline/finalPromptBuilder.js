@@ -17,6 +17,10 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
       throw new Error('Missing required context for prompt building');
     }
 
+    // Determine if RAG has relevant information
+    const hasRelevantRAG = compressedKnowledge.source_snippets.some(s => 
+      s.relevance && s.relevance.toLowerCase().includes('high'));
+    
     // Base context with more structured information
     let context = `
     QUERY INFORMATION:
@@ -25,15 +29,20 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     - Query Type: ${queryInfo.query_type || 'General'}
     - Query Focus: ${queryInfo.focus || 'Not specified'}
     
-    RELEVANT SOURCES:
+    ${hasRelevantRAG ? `
+    RELEVANT BOOK SOURCES:
     ${compressedKnowledge.source_snippets.map(snippet => 
       `[${snippet.id}] From ${snippet.source}:
       "${snippet.text}"
       Relevance: ${snippet.relevance}`
     ).join('\n\n')}
     
-    KEY POINTS:
+    KEY POINTS FROM BOOKS:
     ${compressedKnowledge.key_points.map((point, i) => `[KP${i+1}] ${point}`).join('\n')}
+    ` : `
+    NOTE: No highly relevant information found in the book sources for this query.
+    The answer will primarily rely on web sources and general knowledge.
+    `}
     `;
     
     // Add web search information if available and relevant
@@ -76,7 +85,7 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     
     // Build the final prompt
     const finalPrompt = `
-    You are an intelligent assistant specializing in literature and historical analysis. Answer the following query based on the provided context. Your response should be:
+    You are an intelligent assistant specializing in comprehensive research and analysis. Answer the following query based on the provided context. Your response should be:
     
     1. Comprehensive and directly address the query
     2. Well-structured with clear organization
@@ -84,20 +93,28 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     4. Written in a natural, engaging style
     5. Include citations to sources using [source_id] format
     
+    IMPORTANT GUIDELINES:
+    - If book sources lack relevant information, focus on reliable web sources
+    - For factual queries, prioritize specific details and verified information
+    - When combining book and web sources, cross-reference and verify information
+    - If sources conflict, explain the discrepancies
+    - If key information is missing, acknowledge this in the response
+    
     CITATION RULES:
     - Every fact must have a citation in [brackets]
-    - Use [source_id] format, e.g. [bio_12] or [chapter_3]
-    - Multiple sources can be combined like [bio_12][chapter_3]
+    - Use [source_id] format, e.g. [bio_12], [chapter_3], [WEB1]
+    - Multiple sources can be combined like [bio_12][WEB2]
     - Citations go at the end of the sentence containing the fact
     - End with a "Sources:" section listing all cited sources and their relevance
     
     Example format:
-    "Asa Jennings arrived in Smyrna in August 1922 [bio_12]. During the Great Fire, he worked with both Greek and Turkish authorities [chapter_3][web_2] to coordinate evacuation efforts."
+    "The HMS Victory was launched in 1765 [WEB1] and served as Lord Nelson's flagship at the Battle of Trafalgar [WEB2]. After years of active service, she was moved to dry dock in Portsmouth in 1922 [WEB3][bio_4] where she remains today as a museum ship."
     
     Sources:
-    [bio_12] Character biography - Primary source for early life
-    [chapter_3] Chapter excerpt - Details of evacuation efforts
-    [web_2] Historical article - Corroborating evidence
+    [WEB1] Naval History Database - Primary source for launch date
+    [WEB2] Battle Records - Details of Trafalgar engagement
+    [WEB3] Preservation Records - Documentation of dry dock transfer
+    [bio_4] Ship's historical record - Corroborating evidence
     
     ${context}
     

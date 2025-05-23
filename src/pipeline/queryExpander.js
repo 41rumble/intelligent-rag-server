@@ -11,18 +11,33 @@ require('dotenv').config();
 async function expandQuery(query, branchCount = 3) {
   try {
     const prompt = `
-    Generate ${branchCount} semantically similar but distinct queries based on this original query:
+    Generate ${branchCount} web-search optimized queries based on this original query:
     
     Original query: "${query}"
     
     For each alternative query:
-    1. Rephrase the question to focus on a different aspect of the same topic
-    2. Make sure each query would help retrieve relevant information
-    3. Ensure the queries are diverse but related to the original intent
+    1. Create search-engine optimized versions that will find relevant web pages
+    2. Add contextual terms that would help find specific information
+    3. Include variations that target:
+       - Historical/factual information
+       - Technical/specific details
+       - Overview/summary information
+    4. If the query is about a specific thing (ship, person, event, etc.), include:
+       - Full name/designation queries
+       - Time period specific queries
+       - Location specific queries
+    
+    Example:
+    Original: "What happened to the HMS Victory?"
+    Expanded:
+    - "HMS Victory ship history fate current location"
+    - "HMS Victory Nelson's flagship Portsmouth details"
+    - "When was HMS Victory retired preservation status"
     
     Format your response as a JSON object with:
     - expanded_queries: Array of alternative query strings
-    - reasoning: Brief explanation of how these queries expand the search space
+    - search_focus: What specific aspects each query targets
+    - context_terms: Key contextual terms added to improve results
     `;
 
     const result = await generateStructuredResponse(prompt, {
