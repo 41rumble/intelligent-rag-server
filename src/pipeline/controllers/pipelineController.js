@@ -6,6 +6,7 @@ const InfoSynthesizer = require('../services/infoSynthesizer');
 const ResponseManager = require('../services/responseManager');
 const BookContextEnforcer = require('../../middleware/bookContextEnforcer');
 const { generateStructuredResponse } = require('../../utils/llmProvider');
+const { searchAndSummarize } = require('../webSearch');
 const { v4: uuidv4 } = require('uuid');
 
 /**
@@ -89,14 +90,21 @@ class PipelineController {
         }
       );
 
-      // Generate answer using RAG context
+      // Perform web search with query info
+      const webResults = await searchAndSummarize(query, {
+        query_type: classification.primary_type,
+        analytical_requirements: classification.analytical_requirements
+      });
+
+      // Generate answer using RAG context and web results
       const answer = await this.generateAnswer(
         query,
         {
           classification,
           expanded_query: expandedQuery,
           synthesized,
-          thinking_depth: thinkingDepth
+          thinking_depth: thinkingDepth,
+          web_results: webResults
         }
       );
 

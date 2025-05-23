@@ -245,9 +245,17 @@ async function summarizeWebResults(searchResults, originalQuery) {
  * @param {string} query - Search query
  * @returns {Promise<Object>} Summarized web information
  */
-async function searchAndSummarize(query) {
+async function searchAndSummarize(query, queryInfo = {}) {
   try {
-    const searchResults = await performWebSearch(query);
+    // Default query info if not provided
+    const defaultQueryInfo = {
+      query_type: 'general',
+      analytical_requirements: {
+        context_needed: []
+      }
+    };
+    
+    const searchResults = await performWebSearch(query, queryInfo || defaultQueryInfo);
     const summary = await summarizeWebResults(searchResults, query);
     
     return summary;
