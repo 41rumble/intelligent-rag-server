@@ -62,10 +62,28 @@ async function compressKnowledge(documents, query) {
       maxTokens: 1500
     });
     
+    // Validate result structure
+    if (!result || typeof result !== 'object') {
+      logger.error('Invalid result from generateStructuredResponse:', { result });
+      return {
+        compressed_text: 'Failed to compress knowledge: Invalid response format.',
+        key_points: [],
+        source_ids: [],
+        source_snippets: []
+      };
+    }
+
+    // Ensure required fields exist
+    result.compressed_text = result.compressed_text || '';
+    result.key_points = result.key_points || [];
+    result.source_ids = result.source_ids || [];
+    result.source_snippets = result.source_snippets || [];
+
     logger.info('Knowledge compressed:', { 
       query,
       compressed_length: result.compressed_text.length,
-      key_points_count: result.key_points.length
+      key_points_count: result.key_points.length,
+      source_count: result.source_ids.length
     });
     
     return result;

@@ -223,14 +223,19 @@ router.post('/', async (req, res) => {
       log: responseLog
     });
   } catch (error) {
-    const errorResponse = handlePipelineError(error, {
-      query,
-      projectId,
-      expandedQueries,
-      uniqueDocs,
-      webResults,
-      processedContext
-    });
+    // Only include variables that are defined
+    const errorContext = {
+      query: req.body?.query,
+      projectId: req.body?.projectId
+    };
+
+    // Add optional context if available
+    if (typeof expandedQueries !== 'undefined') errorContext.expandedQueries = expandedQueries;
+    if (typeof uniqueDocs !== 'undefined') errorContext.uniqueDocs = uniqueDocs;
+    if (typeof webResults !== 'undefined') errorContext.webResults = webResults;
+    if (typeof processedContext !== 'undefined') errorContext.processedContext = processedContext;
+
+    const errorResponse = handlePipelineError(error, errorContext);
     return res.status(500).json(errorResponse);
   }
 });
