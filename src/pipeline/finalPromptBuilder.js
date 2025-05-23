@@ -1,5 +1,5 @@
 const logger = require('../utils/logger');
-const { generateCompletion } = require('../utils/llmProvider');
+const { generateStructuredResponse } = require('../utils/llmProvider');
 require('dotenv').config();
 
 /**
@@ -93,14 +93,16 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     
     // Build the final prompt
     const finalPrompt = `
-    You are an intelligent assistant specializing in comprehensive research and analysis. 
+    You are an intelligent assistant specializing in comprehensive research and analysis.
+
+    CRITICAL INSTRUCTION: You MUST respond with ONLY a JSON object.
+    - ANY text outside the JSON structure will cause a system error
+    - NO explanatory text, notes, or regular text answers
+    - NO "Sources:" or other headings
+    - NO markdown formatting
+    - ONLY the JSON object described below
     
-    CRITICAL INSTRUCTION: Your entire response must be a single JSON object.
-    DO NOT include any text, notes, or explanations outside the JSON structure.
-    DO NOT include "Sources:" or any other headings in your response.
-    DO NOT format the response as a regular text answer.
-    
-    Your response must be a single JSON object with this exact structure:
+    REQUIRED: Your response must start with "{" and end with "}" and be a valid JSON object with this EXACT structure:
     {
       "answer": {
         "text": "Your answer text here with citations like [WEB1] or [bio_2]",
@@ -115,12 +117,8 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
       "source_analysis": {
         "book_sources_used": true,
         "web_sources_used": true,
-        "missing_information": [
-          "list any key missing information"
-        ],
-        "source_conflicts": [
-          "list any conflicts between sources"
-        ]
+        "missing_information": [],
+        "source_conflicts": []
       }
     }
 
@@ -141,36 +139,30 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     Note: The citations will be removed from the displayed answer text,
     but are required to track which facts came from which sources.
 
-    BAD RESPONSE FORMAT (DO NOT USE):
-    The HMS Victory was launched in 1765 [WEB1] and served as...
-    
-    Sources:
-    [WEB1] Naval History Database
-    
-    CORRECT RESPONSE FORMAT (USE THIS):
+    CRITICAL: Your response must be EXACTLY like this example, but with your content:
     {
       "answer": {
-        "text": "The HMS Victory was launched in 1765 [WEB1] and served as Lord Nelson's flagship at the Battle of Trafalgar [WEB2]. After years of active service, she was moved to dry dock in Portsmouth in 1922 [WEB3][bio_4] where she remains today as a museum ship.",
+        "text": "The Great Fire of Smyrna began in September 1922 [doc_1]. The fire started in the Armenian quarter [web_1] and quickly spread through the city's narrow streets [doc_2]. Strong winds and dry conditions helped the fire spread rapidly [web_2][doc_1], leading to widespread destruction.",
         "citations": [
           {
-            "id": "WEB1",
-            "source": "Naval History Database",
-            "relevance": "Primary source for launch date"
+            "id": "doc_1",
+            "source": "The Great Fire - Chapter 2",
+            "relevance": "Primary source for fire timeline and conditions"
           },
           {
-            "id": "WEB2",
-            "source": "Battle Records",
-            "relevance": "Details of Trafalgar engagement"
+            "id": "web_1",
+            "source": "Historical Archives",
+            "relevance": "Details about fire's origin point"
           },
           {
-            "id": "WEB3",
-            "source": "Preservation Records",
-            "relevance": "Documentation of dry dock transfer"
+            "id": "doc_2",
+            "source": "City Maps and Records",
+            "relevance": "Information about city layout"
           },
           {
-            "id": "bio_4",
-            "source": "Ship's historical record",
-            "relevance": "Corroborating evidence for preservation status"
+            "id": "web_2",
+            "source": "Weather Records",
+            "relevance": "Confirmation of weather conditions"
           }
         ]
       },
@@ -181,6 +173,8 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
         "source_conflicts": []
       }
     }
+    
+    REMEMBER: Your response must be ONLY this JSON object. No other text.
     
     ${context}
     
@@ -217,26 +211,12 @@ async function generateFinalAnswer(finalPrompt) {
     }
 
     // Generate the answer with more focused parameters
-    const response = await generateCompletion(finalPrompt, {
+    const parsedResponse = await generateStructuredResponse(finalPrompt, {
       temperature: 0.5, // Lower temperature for more focused answers
       maxTokens: 1500,  // Slightly shorter but more concise answers
-      presencePenalty: 0.5, // Encourage diversity in response
-      frequencyPenalty: 0.3 // Reduce repetition
+      maxRetries: 3,    // Retry up to 3 times if JSON parsing fails
+      systemPrompt: "You are a JSON-only assistant that always responds with valid JSON. Never include any text outside the JSON structure."
     });
-    
-    // Clean and parse the response
-    let parsedResponse;
-    try {
-      // Clean the response - remove any non-JSON content
-      const jsonStart = response.indexOf('{');
-      const jsonEnd = response.lastIndexOf('}') + 1;
-      if (jsonStart === -1 || jsonEnd === 0) {
-        throw new Error('No JSON object found in response');
-      }
-      const cleanJson = response.slice(jsonStart, jsonEnd);
-      
-      // Try to parse the cleaned JSON
-      parsedResponse = JSON.parse(cleanJson);
       
       // Validate the response structure
       if (!parsedResponse.answer?.text || !Array.isArray(parsedResponse.answer?.citations)) {
