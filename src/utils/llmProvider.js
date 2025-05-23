@@ -148,8 +148,8 @@ async function generateCompletion(prompt, options = {}, onProgress = null) {
         
         for await (const chunk of stream) {
           const content = chunk.choices[0]?.delta?.content || '';
-          fullContent += content;
-          if (onProgress) {
+          if (content) {
+            fullContent += content;
             onProgress(content);
           }
         }
@@ -182,8 +182,8 @@ async function generateCompletion(prompt, options = {}, onProgress = null) {
 
         for await (const chunk of stream) {
           const content = chunk.message?.content || '';
-          fullContent += content;
-          if (onProgress) {
+          if (content) {
+            fullContent += content;
             onProgress(content);
           }
         }
