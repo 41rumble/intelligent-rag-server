@@ -195,7 +195,7 @@ async function analyzeSearchResult(result, index, originalQuery) {
   ${hasTimeContext ? 'TIME CONTEXT: Pay special attention to dates and chronological information.' : ''}
 
   Content:
-  "${truncatedContent}"
+  "${result.content.length > maxContentLength ? result.content.substring(0, maxContentLength) + '...' : result.content}"
 
   Source:
   Title: ${result.title}
@@ -230,11 +230,8 @@ async function analyzeSearchResult(result, index, originalQuery) {
       throw new Error('Invalid result content');
     }
 
-    // Truncate content if too long
+    // Define max content length
     const maxContentLength = 2000;
-    const truncatedContent = result.content.length > maxContentLength ?
-      result.content.substring(0, maxContentLength) + '...' :
-      result.content;
 
     // Log analysis attempt
     logger.info(`Analyzing result ${index}:`, {
