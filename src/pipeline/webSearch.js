@@ -195,7 +195,7 @@ async function analyzeSearchResult(result, index, originalQuery) {
   ${hasTimeContext ? 'TIME CONTEXT: Pay special attention to dates and chronological information.' : ''}
 
   Content:
-  "${result.content}"
+  "${truncatedContent}"
 
   Source:
   Title: ${result.title}
@@ -225,9 +225,29 @@ async function analyzeSearchResult(result, index, originalQuery) {
   `;
 
   try {
+    // Validate input
+    if (!result || !result.content) {
+      throw new Error('Invalid result content');
+    }
+
+    // Truncate content if too long
+    const maxContentLength = 2000;
+    const truncatedContent = result.content.length > maxContentLength ?
+      result.content.substring(0, maxContentLength) + '...' :
+      result.content;
+
+    // Log analysis attempt
+    logger.info(`Analyzing result ${index}:`, {
+      title: result.title,
+      content_length: result.content.length,
+      truncated: result.content.length > maxContentLength,
+      query_type: isNavalQuery ? 'naval/military' : 'general'
+    });
+
     const analysis = await generateStructuredResponse(prompt, {
       temperature: 0.3,
-      systemPrompt: "You are a quick analysis assistant. Be concise and focus only on relevance to the query."
+      systemPrompt: "You are a quick analysis assistant. Be concise and focus only on relevance to the query.",
+      maxTokens: 500 // Limit response size
     });
 
     // Validate and enhance the analysis
@@ -246,13 +266,45 @@ async function analyzeSearchResult(result, index, originalQuery) {
       }
     };
 
+    // Validate analysis structure
+    if (!enhancedAnalysis || typeof enhancedAnalysis !== 'object') {
+      logger.warn(`Invalid analysis structure for result ${index}`, {
+        analysis: enhancedAnalysis
+      });
+      enhancedAnalysis = {
+        is_relevant: false,
+        relevance_score: 0,
+        key_points: [],
+        reasoning: "Invalid analysis structure",
+        result_index: index,
+        url: result.url,
+        title: result.title,
+        query_type: isNavalQuery ? 'naval/military' : 'general',
+        has_time_context: hasTimeContext,
+        temporal_info: {
+          has_dates: false,
+          time_period: 'unknown',
+          chronological_order: false
+        }
+      };
+    }
+
+    // Ensure all required fields exist
+    enhancedAnalysis.key_points = Array.isArray(enhancedAnalysis.key_points) ? 
+      enhancedAnalysis.key_points : [];
+    enhancedAnalysis.temporal_info = enhancedAnalysis.temporal_info || {
+      has_dates: false,
+      time_period: 'unknown',
+      chronological_order: false
+    };
+
     // Log analysis results
     logger.info(`Analysis for result ${index}:`, {
       title: result.title,
-      is_relevant: enhancedAnalysis.is_relevant,
-      score: enhancedAnalysis.relevance_score,
+      is_relevant: !!enhancedAnalysis.is_relevant,
+      score: enhancedAnalysis.relevance_score || 0,
       key_points: enhancedAnalysis.key_points.length,
-      has_dates: enhancedAnalysis.temporal_info.has_dates
+      has_dates: !!enhancedAnalysis.temporal_info.has_dates
     });
 
     return enhancedAnalysis;
@@ -294,8 +346,12 @@ async function summarizeWebResults(searchResults, originalQuery) {
       };
     }
 
-    // Process results in batches of 3
+    // Process results in batches
     const BATCH_SIZE = 3;
+    const MIN_RELEVANCE_SCORE = 3;
+    const MAX_TOTAL_RESULTS = 15; // Stop after finding enough good results
+
+    // Split into batches
     const batches = [];
     for (let i = 0; i < searchResults.length; i += BATCH_SIZE) {
       batches.push(searchResults.slice(i, i + BATCH_SIZE));
@@ -304,31 +360,75 @@ async function summarizeWebResults(searchResults, originalQuery) {
     logger.info('Processing search results in batches:', {
       total_results: searchResults.length,
       batch_size: BATCH_SIZE,
-      num_batches: batches.length
+      num_batches: batches.length,
+      max_results: MAX_TOTAL_RESULTS,
+      min_score: MIN_RELEVANCE_SCORE
     });
 
     // Process each batch
     let allRelevantAnalyses = [];
+    let totalProcessed = 0;
+    let failedAnalyses = 0;
+
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i];
       logger.info(`Processing batch ${i + 1}/${batches.length}`);
 
-      // Analyze batch
-      const batchAnalyses = await Promise.all(
-        batch.map((result, idx) => 
-          analyzeSearchResult(result, i * BATCH_SIZE + idx + 1, originalQuery)
-        )
-      );
+      try {
+        // Analyze batch with individual error handling
+        const batchAnalyses = await Promise.all(
+          batch.map(async (result, idx) => {
+            try {
+              return await analyzeSearchResult(result, i * BATCH_SIZE + idx + 1, originalQuery);
+            } catch (error) {
+              failedAnalyses++;
+              logger.warn(`Failed to analyze result in batch ${i + 1}`, {
+                error: error.message,
+                result_index: i * BATCH_SIZE + idx + 1
+              });
+              return null;
+            }
+          })
+        );
 
-      // Filter relevant results from this batch
-      const relevantFromBatch = batchAnalyses.filter(a => a.is_relevant && a.relevance_score > 3);
-      allRelevantAnalyses.push(...relevantFromBatch);
+        // Filter out failed analyses and low relevance results
+        const validAnalyses = batchAnalyses.filter(a => a !== null);
+        const relevantFromBatch = validAnalyses.filter(a => a.is_relevant && a.relevance_score > MIN_RELEVANCE_SCORE);
+        
+        // Track processing stats
+        totalProcessed += batch.length;
+        allRelevantAnalyses.push(...relevantFromBatch);
 
-      logger.info(`Batch ${i + 1} analysis:`, {
-        batch_size: batch.length,
-        relevant_found: relevantFromBatch.length,
-        scores: relevantFromBatch.map(a => a.relevance_score)
-      });
+        logger.info(`Batch ${i + 1} analysis:`, {
+          batch_size: batch.length,
+          valid_results: validAnalyses.length,
+          relevant_found: relevantFromBatch.length,
+          scores: relevantFromBatch.map(a => a.relevance_score),
+          total_relevant_so_far: allRelevantAnalyses.length
+        });
+
+        // Stop if we have enough good results
+        if (allRelevantAnalyses.length >= MAX_TOTAL_RESULTS) {
+          logger.info('Found enough relevant results, stopping batch processing');
+          break;
+        }
+      } catch (batchError) {
+        logger.error(`Error processing batch ${i + 1}`, {
+          error: batchError.message,
+          batch_size: batch.length
+        });
+        failedAnalyses += batch.length;
+      }
+    }
+
+    logger.info('Batch processing complete:', {
+      total_processed: totalProcessed,
+      failed_analyses: failedAnalyses,
+      relevant_found: allRelevantAnalyses.length,
+      avg_score: allRelevantAnalyses.length > 0 
+        ? allRelevantAnalyses.reduce((sum, a) => sum + a.relevance_score, 0) / allRelevantAnalyses.length 
+        : 0
+    });
     }
 
     logger.info('All batches processed:', {
