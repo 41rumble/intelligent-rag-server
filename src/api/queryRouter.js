@@ -271,11 +271,69 @@ router.post('/', async (req, res) => {
     "Asa Jennings arrived in Smyrna in August 1922. During the Great Fire, he worked with both Greek and Turkish authorities to coordinate evacuation efforts."
     `;
 
-    // Create a buffer to collect the answer
-    let answerBuffer = '';
+    // Format source snippets before starting answer generation
+    let formattedSnippets = processedContext.source_snippets.map(snippet => {
+      // Generate a meaningful ID based on the source type and content
+      let sourceId;
+      if (snippet.type === 'chapter_synopsis') {
+        sourceId = `ch_${snippet.chapter || 'unknown'}`;
+      } else if (snippet.type === 'bio') {
+        sourceId = `bio_${(snippet.name || 'unknown').toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+      } else if (snippet.type === 'plot_event') {
+        sourceId = `event_${snippet.id || 'unknown'}`;
+      } else if (snippet.type === 'location_description') {
+        sourceId = `loc_${(snippet.location || 'unknown').toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+      } else {
+        sourceId = `doc_${snippet.id || 'unknown'}`;
+      }
+
+      return {
+        id: sourceId,
+        text: snippet.text,
+        source: snippet.source,
+        relevance: snippet.relevance || 1.0,
+        metadata: {
+          type: snippet.type || 'text',
+          chapter: snippet.chapter || null,
+          page: snippet.page || null,
+          name: snippet.name || null,
+          location: snippet.location || null
+        }
+      };
+    });
+
+    // Format web sources before starting answer generation
+    let webSources = webResults ? webResults.source_urls.map((url, index) => {
+      const urlObj = typeof url === 'string' ? { url } : url;
+      const domain = new URL(urlObj.url).hostname.replace('www.', '');
+      return {
+        id: `web_${domain.replace(/[^a-z0-9]/g, '_')}`,
+        text: urlObj.url,
+        source: 'web',
+        relevance: 1.0,
+        metadata: {
+          type: 'web',
+          url: urlObj.url,
+          title: urlObj.title || null,
+          domain: domain
+        }
+      };
+    }) : [];
+
+    // Send source snippets first
+    res.write(Buffer.from(JSON.stringify({
+      type: 'answer_progress',
+      data: {
+        text: '',
+        complete: false,
+        source_snippets: [...formattedSnippets, ...webSources]
+      }
+    }) + '\n', 'utf8'));
 
     // Generate answer with streaming
-    const answer = await generateFinalAnswer(finalPrompt, (chunk) => {
+    let answer = '';
+    let answerBuffer = '';
+    answer = await generateFinalAnswer(finalPrompt, (chunk) => {
       // Append chunk to buffer
       answerBuffer += chunk;
       
@@ -290,10 +348,6 @@ router.post('/', async (req, res) => {
     });
 
     logger.info('Answer generated:', { length: answer.length });
-
-    // Initialize empty arrays for snippets
-    let formattedSnippets = [];
-    let webSources = [];
 
     // Format response for logging
     const responseLog = {
@@ -337,55 +391,6 @@ router.post('/', async (req, res) => {
       ]
     };
 
-    // Format source snippets
-    formattedSnippets = processedContext.source_snippets.map(snippet => {
-      // Generate a meaningful ID based on the source type and content
-      let sourceId;
-      if (snippet.type === 'chapter_synopsis') {
-        sourceId = `ch_${snippet.chapter || 'unknown'}`;
-      } else if (snippet.type === 'bio') {
-        sourceId = `bio_${(snippet.name || 'unknown').toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
-      } else if (snippet.type === 'plot_event') {
-        sourceId = `event_${snippet.id || 'unknown'}`;
-      } else if (snippet.type === 'location_description') {
-        sourceId = `loc_${(snippet.location || 'unknown').toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
-      } else {
-        sourceId = `doc_${snippet.id || 'unknown'}`;
-      }
-
-      return {
-        id: sourceId,
-        text: snippet.text,
-        source: snippet.source,
-        relevance: snippet.relevance || 1.0,
-        metadata: {
-          type: snippet.type || 'text',
-          chapter: snippet.chapter || null,
-          page: snippet.page || null,
-          name: snippet.name || null,
-          location: snippet.location || null
-        }
-      };
-    });
-
-    // Format web sources
-    webSources = webResults ? webResults.source_urls.map((url, index) => {
-      const urlObj = typeof url === 'string' ? { url } : url;
-      const domain = new URL(urlObj.url).hostname.replace('www.', '');
-      return {
-        id: `web_${domain.replace(/[^a-z0-9]/g, '_')}`,
-        text: urlObj.url,
-        source: 'web',
-        relevance: 1.0,
-        metadata: {
-          type: 'web',
-          url: urlObj.url,
-          title: urlObj.title || null,
-          domain: domain
-        }
-      };
-    }) : [];
-
     // Log the formatted response
     logger.info('\n=== Query Response ===\n' +
       `Query: "${query}"\n\n` +
@@ -404,57 +409,51 @@ router.post('/', async (req, res) => {
         ).join('\n')
     );
 
-    // Send final progress update
-    res.write(Buffer.from(JSON.stringify({
-      type: 'progress',
-      data: {
-        steps: [
-          {
-            id: 'query_expansion',
-            status: 'completed',
-            message: 'Analyzing query and generating search variations',
-            details: `Found ${expandedQueries.length} similar queries`
-          },
-          {
-            id: 'document_search',
-            status: 'completed',
-            message: 'Searching book content',
-            details: `Found ${uniqueDocs.length} relevant passages`
-          },
-          {
-            id: 'web_search',
-            status: 'completed',
-            message: 'Searching web resources',
-            details: webResults ? `Found ${webResults.source_urls.length} relevant web sources` : 'No web sources needed'
-          },
-          {
-            id: 'context_processing',
-            status: 'completed',
-            message: 'Processing and combining information',
-            details: `Processed ${processedContext.key_points.length} key points`
-          },
-          {
-            id: 'answer_generation',
-            status: 'completed',
-            message: 'Generating final answer',
-            details: `Generated ${answer.length} character response`
-          }
-        ],
-        current_step: 'completed',
-        total_steps: 5,
-        completed_steps: 5
-      }
-    }) + '\n', 'utf8'));
-
-    // Send final answer completion
+    // Send final answer completion with everything
     res.write(Buffer.from(JSON.stringify({
       type: 'answer_progress',
       data: {
         text: '',
         complete: true,
         answer: answer.trim(),
-        source_snippets: [...formattedSnippets, ...webSources],
-        log: responseLog
+        log: responseLog,
+        final_progress: {
+          steps: [
+            {
+              id: 'query_expansion',
+              status: 'completed',
+              message: 'Analyzing query and generating search variations',
+              details: `Found ${expandedQueries.length} similar queries`
+            },
+            {
+              id: 'document_search',
+              status: 'completed',
+              message: 'Searching book content',
+              details: `Found ${uniqueDocs.length} relevant passages`
+            },
+            {
+              id: 'web_search',
+              status: 'completed',
+              message: 'Searching web resources',
+              details: webResults ? `Found ${webResults.source_urls.length} relevant web sources` : 'No web sources needed'
+            },
+            {
+              id: 'context_processing',
+              status: 'completed',
+              message: 'Processing and combining information',
+              details: `Processed ${processedContext.key_points.length} key points`
+            },
+            {
+              id: 'answer_generation',
+              status: 'completed',
+              message: 'Generating final answer',
+              details: `Generated ${answer.length} character response`
+            }
+          ],
+          current_step: 'completed',
+          total_steps: 5,
+          completed_steps: 5
+        }
       }
     }) + '\n', 'utf8'));
 
