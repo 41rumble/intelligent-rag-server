@@ -346,8 +346,8 @@ async function summarizeWebResults(searchResults, originalQuery) {
     }
 
     // Process results in batches
-    const BATCH_SIZE = 3;
-    const MIN_RELEVANCE_SCORE = 3;
+    const BATCH_SIZE = 5; // Larger batch size for better context
+    const MIN_RELEVANCE_SCORE = 2; // Lower threshold for historical queries
     const MAX_TOTAL_RESULTS = 15; // Stop after finding enough good results
 
     // Split into batches
@@ -450,10 +450,12 @@ async function summarizeWebResults(searchResults, originalQuery) {
     const topResults = allRelevantAnalyses.slice(0, 5); // Only use top 5 most relevant
 
     // Determine if this is a naval/military query
-    const isNavalQuery = originalQuery.toLowerCase().includes('naval') ||
-                        originalQuery.toLowerCase().includes('ship') ||
-                        originalQuery.toLowerCase().includes('military') ||
-                        originalQuery.toLowerCase().includes('war');
+    const query = originalQuery.toLowerCase();
+    const navalTerms = ['naval', 'ship', 'military', 'war', 'fleet', 'vessel', 'warship', 'navy'];
+    const historicalTerms = ['rescue', 'operation', 'deployment', 'battle', 'campaign'];
+    const isNavalQuery = navalTerms.some(term => query.includes(term)) || 
+                        (historicalTerms.some(term => query.includes(term)) && 
+                         navalTerms.some(term => query.includes(term)));
 
     logger.info('Query analysis:', {
       query: originalQuery,
