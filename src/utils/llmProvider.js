@@ -163,9 +163,33 @@ async function generateCompletion(prompt, options = {}) {
         stream: true
       });
 
+      let buffer = '';
       for await (const part of stream) {
         if (part.message?.content) {
-          fullResponse += part.message.content;
+          buffer += part.message.content;
+          // Try to find complete JSON objects as we go
+          if (buffer.includes('{') && buffer.includes('}')) {
+            const extracted = extractJsonString(buffer);
+            if (extracted) {
+              try {
+                JSON.parse(extracted); // Validate it's complete JSON
+                fullResponse = extracted;
+                break; // We found a complete JSON object
+              } catch (e) {
+                // Not complete JSON yet, continue collecting
+              }
+            }
+          }
+        }
+      }
+      
+      // If we didn't find complete JSON in the stream, use the full buffer
+      if (!fullResponse && buffer) {
+        const extracted = extractJsonString(buffer);
+        if (extracted) {
+          fullResponse = extracted;
+        } else {
+          fullResponse = buffer;
         }
       }
 
@@ -189,28 +213,80 @@ async function generateCompletion(prompt, options = {}) {
  * @returns {string|null} Extracted JSON string or null if not found
  */
 function extractJsonString(text) {
-  // Try to find JSON between curly braces (for objects)
-  const objMatch = text.match(/\{[\s\S]*\}/);
-  if (objMatch) {
-    try {
-      JSON.parse(objMatch[0]); // Validate it's valid JSON
-      return objMatch[0];
-    } catch (e) {
-      // If parse fails, it might be a partial match. Continue to next attempt.
+  // Helper to count JSON brackets
+  const countBrackets = (str) => {
+    let curlyCount = 0;
+    let squareCount = 0;
+    let inString = false;
+    let escapeNext = false;
+    
+    for (let i = 0; i < str.length; i++) {
+      const char = str[i];
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      
+      if (char === '\\') {
+        escapeNext = true;
+        continue;
+      }
+      
+      if (char === '"' && !escapeNext) {
+        inString = !inString;
+        continue;
+      }
+      
+      if (!inString) {
+        if (char === '{') curlyCount++;
+        if (char === '}') curlyCount--;
+        if (char === '[') squareCount++;
+        if (char === ']') squareCount--;
+      }
+    }
+    return { curlyCount, squareCount };
+  };
+
+  // Try to find complete JSON object
+  let start = text.indexOf('{');
+  if (start !== -1) {
+    for (let end = text.length; end > start; end--) {
+      const slice = text.substring(start, end);
+      const counts = countBrackets(slice);
+      
+      if (counts.curlyCount === 0 && counts.squareCount === 0) {
+        try {
+          const parsed = JSON.parse(slice);
+          if (typeof parsed === 'object' && parsed !== null) {
+            return slice;
+          }
+        } catch (e) {
+          // Not valid JSON, continue searching
+        }
+      }
     }
   }
-  
-  // Try to find JSON between square brackets (for arrays)
-  const arrayMatch = text.match(/\[[\s\S]*\]/);
-  if (arrayMatch) {
-    try {
-      JSON.parse(arrayMatch[0]); // Validate it's valid JSON
-      return arrayMatch[0];
-    } catch (e) {
-      // If parse fails, continue to next attempt
+
+  // Try to find complete JSON array
+  start = text.indexOf('[');
+  if (start !== -1) {
+    for (let end = text.length; end > start; end--) {
+      const slice = text.substring(start, end);
+      const counts = countBrackets(slice);
+      
+      if (counts.curlyCount === 0 && counts.squareCount === 0) {
+        try {
+          const parsed = JSON.parse(slice);
+          if (Array.isArray(parsed)) {
+            return slice;
+          }
+        } catch (e) {
+          // Not valid JSON, continue searching
+        }
+      }
     }
   }
-  
+
   return null;
 }
 

@@ -230,8 +230,7 @@ async function summarizeWebResults(searchResults, originalQuery) {
     `;
 
     const response = await generateStructuredResponse(prompt, {
-      temperature: 0.3,
-      maxTokens: 1000,
+      temperature: 0.3, // Low temperature for more focused responses
       systemPrompt: "You are a JSON-only assistant. Your response must be valid JSON with the exact structure specified."
     });
 
