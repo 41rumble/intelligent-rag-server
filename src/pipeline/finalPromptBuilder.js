@@ -93,9 +93,12 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     
     // Build the final prompt
     const finalPrompt = `
-    You are an intelligent assistant specializing in comprehensive research and analysis. Answer the following query based on the provided context.
-
-    CRITICAL: YOU MUST RESPOND WITH VALID JSON ONLY. DO NOT INCLUDE ANY TEXT BEFORE OR AFTER THE JSON.
+    You are an intelligent assistant specializing in comprehensive research and analysis. 
+    
+    CRITICAL INSTRUCTION: Your entire response must be a single JSON object.
+    DO NOT include any text, notes, or explanations outside the JSON structure.
+    DO NOT include "Sources:" or any other headings in your response.
+    DO NOT format the response as a regular text answer.
     
     Your response must be a single JSON object with this exact structure:
     {
@@ -138,10 +141,16 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     Note: The citations will be removed from the displayed answer text,
     but are required to track which facts came from which sources.
 
-    EXAMPLE RESPONSE:
+    BAD RESPONSE FORMAT (DO NOT USE):
+    The HMS Victory was launched in 1765 [WEB1] and served as...
+    
+    Sources:
+    [WEB1] Naval History Database
+    
+    CORRECT RESPONSE FORMAT (USE THIS):
     {
       "answer": {
-        "text": "The HMS Victory was launched in 1765 [WEB1] and served as Lord Nelson's flagship at the Battle of Trafalgar [WEB2]. After years of active service, she was moved to dry dock in Portsmouth in 1922 [WEB3][bio_4] where she remains today as a museum ship. (Note: These citations will be removed from the displayed text but are needed to track sources)",
+        "text": "The HMS Victory was launched in 1765 [WEB1] and served as Lord Nelson's flagship at the Battle of Trafalgar [WEB2]. After years of active service, she was moved to dry dock in Portsmouth in 1922 [WEB3][bio_4] where she remains today as a museum ship.",
         "citations": [
           {
             "id": "WEB1",
@@ -271,7 +280,30 @@ async function generateFinalAnswer(finalPrompt) {
       
       // Attempt to salvage non-JSON response
       if (!parsedResponse) {
-        return `${response.trim()}\n\nNote: Response formatting error - citations may not be properly structured.`;
+        // Try to extract the main answer and sources from unstructured response
+        const lines = response.split('\n').map(line => line.trim()).filter(line => line);
+        
+        // Remove any "Sources:" section and citations from the text
+        const mainText = lines
+          .filter(line => !line.startsWith('Sources:'))
+          .join(' ')
+          .replace(/\[\w+\d*\]/g, '')  // Remove citations
+          .replace(/\s+/g, ' ')         // Clean up whitespace
+          .trim();
+        
+        // Extract sources if present
+        const sourcesStart = lines.findIndex(line => line.startsWith('Sources:'));
+        const sources = sourcesStart !== -1 
+          ? lines.slice(sourcesStart + 1)
+              .filter(line => line.match(/^\[.*\]/))  // Only keep lines with citations
+              .map(line => line.trim())
+              .join('\n')
+          : '';
+        
+        // Format as a clean response
+        return `${mainText}
+
+${sources ? `References:\n${sources}` : ''}`.trim();
       }
       throw parseError;
     }
