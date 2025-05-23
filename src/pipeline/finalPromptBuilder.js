@@ -93,36 +93,61 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     
     // Build the final prompt
     const finalPrompt = `
-    You are an intelligent assistant specializing in comprehensive research and analysis. Answer the following query based on the provided context. Your response should be:
-    
-    1. Comprehensive and directly address the query
-    2. Well-structured with clear organization
-    3. Factually accurate and based ONLY on the provided information
-    4. Written in a natural, engaging style
-    5. Include citations to sources using [source_id] format
-    
-    IMPORTANT GUIDELINES:
-    - If book sources lack relevant information, focus on reliable web sources
-    - For factual queries, prioritize specific details and verified information
-    - When combining book and web sources, cross-reference and verify information
-    - If sources conflict, explain the discrepancies
-    - If key information is missing, acknowledge this in the response
-    
-    CITATION RULES:
-    - Every fact must have a citation in [brackets]
-    - Use [source_id] format, e.g. [bio_12], [chapter_3], [WEB1]
-    - Multiple sources can be combined like [bio_12][WEB2]
-    - Citations go at the end of the sentence containing the fact
-    - End with a "Sources:" section listing all cited sources and their relevance
-    
-    Example format:
-    "The HMS Victory was launched in 1765 [WEB1] and served as Lord Nelson's flagship at the Battle of Trafalgar [WEB2]. After years of active service, she was moved to dry dock in Portsmouth in 1922 [WEB3][bio_4] where she remains today as a museum ship."
-    
-    Sources:
-    [WEB1] Naval History Database - Primary source for launch date
-    [WEB2] Battle Records - Details of Trafalgar engagement
-    [WEB3] Preservation Records - Documentation of dry dock transfer
-    [bio_4] Ship's historical record - Corroborating evidence
+    You are an intelligent assistant specializing in comprehensive research and analysis. Answer the following query based on the provided context.
+
+    RESPONSE FORMAT:
+    Your response must be a valid JSON object with the following structure:
+    {
+      "answer": {
+        "text": "Main answer text with citations in [brackets]",
+        "citations": [
+          {
+            "id": "WEB1",
+            "source": "Source title/description",
+            "relevance": "Why this source is relevant"
+          },
+          // ... more citations
+        ]
+      },
+      "source_analysis": {
+        "book_sources_used": boolean,
+        "web_sources_used": boolean,
+        "missing_information": ["List of any important missing information"],
+        "source_conflicts": ["Any conflicts between sources found"]
+      }
+    }
+
+    CITATION REQUIREMENTS:
+    1. Every factual statement must have a citation
+    2. Citations must be in [brackets] and placed at the end of the relevant sentence
+    3. Multiple sources use format: [WEB1][bio_2]
+    4. All citations must be listed in the citations array
+    5. Citations must match the source IDs from the provided context
+
+    EXAMPLE RESPONSE:
+    {
+      "answer": {
+        "text": "The HMS Victory was launched in 1765 [WEB1] and served as Lord Nelson's flagship at the Battle of Trafalgar [WEB2]. After years of active service, she was moved to dry dock in Portsmouth in 1922 [WEB3][bio_4] where she remains today as a museum ship.",
+        "citations": [
+          {
+            "id": "WEB1",
+            "source": "Naval History Database",
+            "relevance": "Primary source for launch date"
+          },
+          {
+            "id": "WEB2",
+            "source": "Battle Records",
+            "relevance": "Details of Trafalgar engagement"
+          }
+        ]
+      },
+      "source_analysis": {
+        "book_sources_used": true,
+        "web_sources_used": true,
+        "missing_information": [],
+        "source_conflicts": []
+      }
+    }
     
     ${context}
     
@@ -170,24 +195,59 @@ async function generateFinalAnswer(finalPrompt) {
     }
 
     // Generate the answer with more focused parameters
-    const answer = await generateCompletion(finalPrompt, {
+    const response = await generateCompletion(finalPrompt, {
       temperature: 0.5, // Lower temperature for more focused answers
       maxTokens: 1500,  // Slightly shorter but more concise answers
       presencePenalty: 0.5, // Encourage diversity in response
       frequencyPenalty: 0.3 // Reduce repetition
     });
     
-    // Validate the answer
-    if (!answer || answer.trim().length === 0) {
-      throw new Error('Empty or invalid answer generated');
+    // Parse the response as JSON
+    let parsedResponse;
+    try {
+      parsedResponse = JSON.parse(response);
+    } catch (parseError) {
+      logger.error('Failed to parse LLM response as JSON:', {
+        error: parseError.message,
+        response: response
+      });
+      throw new Error('Invalid response format from LLM');
     }
     
+    // Validate the response structure
+    if (!parsedResponse.answer?.text || !Array.isArray(parsedResponse.answer?.citations)) {
+      throw new Error('Response missing required fields');
+    }
+    
+    // Format the final answer with citations
+    const formattedAnswer = `
+${parsedResponse.answer.text}
+
+Sources:
+${parsedResponse.answer.citations.map(citation => 
+  `[${citation.id}] ${citation.source} - ${citation.relevance}`
+).join('\n')}
+
+${parsedResponse.source_analysis.missing_information.length > 0 ? `
+Missing Information:
+${parsedResponse.source_analysis.missing_information.map(info => `- ${info}`).join('\n')}
+` : ''}
+
+${parsedResponse.source_analysis.source_conflicts.length > 0 ? `
+Source Conflicts:
+${parsedResponse.source_analysis.source_conflicts.map(conflict => `- ${conflict}`).join('\n')}
+` : ''}
+    `.trim();
+    
     logger.info('Final answer generated:', { 
-      answer_length: answer.length,
-      prompt_length: finalPrompt.length
+      answer_length: formattedAnswer.length,
+      prompt_length: finalPrompt.length,
+      citations_count: parsedResponse.answer.citations.length,
+      has_missing_info: parsedResponse.source_analysis.missing_information.length > 0,
+      has_conflicts: parsedResponse.source_analysis.source_conflicts.length > 0
     });
     
-    return answer.trim();
+    return formattedAnswer;
   } catch (error) {
     logger.error('Error generating final answer:', {
       error: error.message,
