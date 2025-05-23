@@ -199,19 +199,8 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
   } catch (error) {
     logger.error('Error building final prompt:', error);
     
-    // Fallback prompt
-    const fallbackPrompt = `
-    Answer the following query based on your knowledge:
-    
-    QUERY: "${queryInfo.original_query}"
-    
-    Provide a thoughtful, well-reasoned response.
-    `;
-    
-    return {
-      prompt: fallbackPrompt,
-      context: 'Error building context'
-    };
+    // Do not provide a fallback prompt
+    throw error;
   }
 }
 
@@ -278,33 +267,10 @@ async function generateFinalAnswer(finalPrompt) {
         stack: parseError.stack
       });
       
-      // Attempt to salvage non-JSON response
-      if (!parsedResponse) {
-        // Try to extract the main answer and sources from unstructured response
-        const lines = response.split('\n').map(line => line.trim()).filter(line => line);
-        
-        // Remove any "Sources:" section and citations from the text
-        const mainText = lines
-          .filter(line => !line.startsWith('Sources:'))
-          .join(' ')
-          .replace(/\[\w+\d*\]/g, '')  // Remove citations
-          .replace(/\s+/g, ' ')         // Clean up whitespace
-          .trim();
-        
-        // Extract sources if present
-        const sourcesStart = lines.findIndex(line => line.startsWith('Sources:'));
-        const sources = sourcesStart !== -1 
-          ? lines.slice(sourcesStart + 1)
-              .filter(line => line.match(/^\[.*\]/))  // Only keep lines with citations
-              .map(line => line.trim())
-              .join('\n')
-          : '';
-        
-        // Format as a clean response
-        return `${mainText}
-
-${sources ? `References:\n${sources}` : ''}`.trim();
-      }
+      // Do not attempt to salvage non-JSON responses
+      logger.error('Response must be valid JSON. Got:', {
+        response_preview: response.slice(0, 200)
+      });
       throw parseError;
     }
     
@@ -312,23 +278,18 @@ ${sources ? `References:\n${sources}` : ''}`.trim();
     const cleanAnswer = parsedResponse.answer.text.replace(/\[\w+\d*\]/g, '').replace(/\s+/g, ' ').trim();
     
     // Format the final answer without citations in the text
-    const formattedAnswer = `
-${cleanAnswer}
+    const formattedAnswer = `${cleanAnswer}
 
-Sources:
+References:
 ${parsedResponse.answer.citations.map(citation => 
   `[${citation.id}] ${citation.source} - ${citation.relevance}`
 ).join('\n')}
 
-${parsedResponse.source_analysis.missing_information.length > 0 ? `
-Missing Information:
-${parsedResponse.source_analysis.missing_information.map(info => `- ${info}`).join('\n')}
-` : ''}
+${parsedResponse.source_analysis.missing_information.length > 0 ? `Missing Information:
+${parsedResponse.source_analysis.missing_information.map(info => `- ${info}`).join('\n')}` : ''}
 
-${parsedResponse.source_analysis.source_conflicts.length > 0 ? `
-Source Conflicts:
-${parsedResponse.source_analysis.source_conflicts.map(conflict => `- ${conflict}`).join('\n')}
-` : ''}
+${parsedResponse.source_analysis.source_conflicts.length > 0 ? `Source Conflicts:
+${parsedResponse.source_analysis.source_conflicts.map(conflict => `- ${conflict}`).join('\n')}` : ''}
     `.trim();
     
     logger.info('Final answer generated:', { 
