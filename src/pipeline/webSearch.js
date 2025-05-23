@@ -328,31 +328,73 @@ async function summarizeWebResults(searchResults, originalQuery) {
     }
     `;
 
-    const response = await generateStructuredResponse(combinedPrompt, {
-      temperature: 0.3,
-      systemPrompt: "You are a synthesis assistant. Combine information accurately and cite sources."
-    });
+    try {
+      const response = await generateStructuredResponse(combinedPrompt, {
+        temperature: 0.3,
+        systemPrompt: "You are a synthesis assistant. Combine information accurately and cite sources."
+      });
 
-    // Add source information
-    response.source_urls = relevantAnalyses.map(a => ({
-      id: `WEB${a.result_index}`,
-      url: a.url,
-      title: a.title,
-      relevance_score: a.relevance_score
-    }));
+      // Validate response structure
+      if (!response || typeof response !== 'object') {
+        throw new Error('Invalid response structure from synthesis');
+      }
 
-    logger.info('Web results synthesized:', {
-      query: originalQuery,
-      summary_length: response.summary.length,
-      facts_count: response.facts.length,
-      sources: response.source_urls.length
-    });
+      // Initialize missing fields
+      response.summary = response.summary || 'No summary generated';
+      response.facts = Array.isArray(response.facts) ? response.facts : [];
+      response.source_urls = response.source_urls || [];
 
-    return {
-      ...response,
-      source: 'web_search_summary',
-      query: originalQuery
-    };
+      // Add source information from our top results
+      response.source_urls = topResults.map(a => ({
+        id: `WEB${a.result_index}`,
+        url: a.url,
+        title: a.title,
+        relevance_score: a.relevance_score
+      }));
+
+      logger.info('Web results synthesized:', {
+        query: originalQuery,
+        summary_length: response.summary.length,
+        facts_count: response.facts.length,
+        sources: response.source_urls.length,
+        top_scores: topResults.map(r => r.relevance_score)
+      });
+
+      return {
+        ...response,
+        source: 'web_search_summary',
+        query: originalQuery,
+        metadata: {
+          total_analyzed: searchResults.length,
+          total_relevant: allRelevantAnalyses.length,
+          avg_relevance: allRelevantAnalyses.length > 0 
+            ? allRelevantAnalyses.reduce((sum, a) => sum + a.relevance_score, 0) / allRelevantAnalyses.length 
+            : 0,
+          top_result_count: topResults.length
+        }
+      };
+    } catch (error) {
+      logger.error('Error in synthesis step:', {
+        error: error.message,
+        topResults_length: topResults.length,
+        prompt_length: combinedPrompt.length
+      });
+
+      // Return a valid structure even on error
+      return {
+        summary: 'Failed to synthesize web search results.',
+        facts: [],
+        source_urls: topResults.map(a => ({
+          id: `WEB${a.result_index}`,
+          url: a.url,
+          title: a.title,
+          relevance_score: a.relevance_score
+        })),
+        source: 'web_search_summary',
+        query: originalQuery,
+        error: error.message
+      };
+    }
   } catch (error) {
     logger.error('Error summarizing web results:', {
       message: error.message,
