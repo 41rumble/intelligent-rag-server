@@ -147,80 +147,35 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     CRITICAL INSTRUCTION: You MUST respond with ONLY a JSON object.
     - ANY text outside the JSON structure will cause a system error
     - NO explanatory text, notes, or regular text answers
-    - NO "Sources:" or other headings
     - NO markdown formatting
     - ONLY the JSON object described below
     
     REQUIRED: Your response must start with "{" and end with "}" and be a valid JSON object with this EXACT structure:
     {
-      "answer": {
-        "text": "Your answer text here with citations like [WEB1] or [bio_2]",
-        "citations": [
-          {
-            "id": "source_id",
-            "source": "source name/title",
-            "relevance": "brief explanation of source relevance"
-          }
-        ]
-      },
-      "source_analysis": {
-        "book_sources_used": true,
-        "web_sources_used": true,
-        "missing_information": [],
-        "source_conflicts": []
-      }
+      "answer": "Your comprehensive answer text here",
+      "missing_information": ["Any key information that would help answer the query but wasn't found in the sources"],
+      "source_conflicts": ["Any contradictions between different sources, if any"]
     }
 
     IMPORTANT JSON FORMATTING RULES:
     1. Use double quotes (") for all strings
     2. No trailing commas
-    3. Boolean values must be true or false (no quotes)
-    4. Arrays can be empty [] but must be present
-    5. No comments in the JSON
+    3. Arrays can be empty [] but must be present
+    4. No comments in the JSON
+    5. The answer field is a string, not an object
 
-    CITATION REQUIREMENTS:
-    1. Every factual statement must have a citation in the citations array
-    2. Citations in the text should use [source_id] format (e.g., [WEB1], [doc_2])
-    3. Multiple sources use format: [WEB1][bio_2]
-    4. Each citation must reference a source from the provided context
-    5. The citations array must include ALL sources used, with explanations
-    
-    IMPORTANT: Include citations inline with your answer text (e.g., "The ship served in WWII [WEB1]").
-    These will be automatically removed from the final display but are needed for source tracking.
+    ANSWER REQUIREMENTS:
+    1. Provide a comprehensive answer based ONLY on the provided context
+    2. Do NOT include citations or reference markers in your answer
+    3. Write in clear, natural language
+    4. If information is missing or unclear, acknowledge this in the missing_information array
+    5. Focus on directly answering the user's query
 
-    CRITICAL: Your response must be EXACTLY like this example, but with your content:
+    EXAMPLE of correct response format:
     {
-      "answer": {
-        "text": "The Great Fire of Smyrna began in September 1922 [doc_1]. The fire started in the Armenian quarter [web_1] and quickly spread through the city's narrow streets [doc_2]. Strong winds and dry conditions helped the fire spread rapidly [web_2][doc_1], leading to widespread destruction.",
-        "citations": [
-          {
-            "id": "doc_1",
-            "source": "The Great Fire - Chapter 2",
-            "relevance": "Primary source for fire timeline and conditions"
-          },
-          {
-            "id": "web_1",
-            "source": "Historical Archives",
-            "relevance": "Details about fire's origin point"
-          },
-          {
-            "id": "doc_2",
-            "source": "City Maps and Records",
-            "relevance": "Information about city layout"
-          },
-          {
-            "id": "web_2",
-            "source": "Weather Records",
-            "relevance": "Confirmation of weather conditions"
-          }
-        ]
-      },
-      "source_analysis": {
-        "book_sources_used": true,
-        "web_sources_used": true,
-        "missing_information": [],
-        "source_conflicts": []
-      }
+      "answer": "The Great Fire of Smyrna began in September 1922. The fire started in the Armenian quarter and quickly spread through the city's narrow streets. Strong winds and dry conditions helped the fire spread rapidly, leading to widespread destruction.",
+      "missing_information": ["Exact date and time the fire started", "Total number of casualties"],
+      "source_conflicts": []
     }
     
     REMEMBER: Your response must be ONLY this JSON object. No other text.
@@ -283,23 +238,17 @@ async function generateFinalAnswer(finalPrompt) {
     // Log raw response for debugging
     logger.info('Raw LLM response:', {
       has_answer: !!parsedResponse.answer,
-      has_text: !!parsedResponse.answer?.text,
-      has_citations: Array.isArray(parsedResponse.answer?.citations),
-      citations_count: parsedResponse.answer?.citations?.length || 0
+      answer_type: typeof parsedResponse.answer,
+      has_missing_info: Array.isArray(parsedResponse.missing_information),
+      has_conflicts: Array.isArray(parsedResponse.source_conflicts)
     });
 
-    // Initialize and validate answer structure
-    if (!parsedResponse.answer || typeof parsedResponse.answer !== 'object') {
-      logger.warn('Missing answer object, initializing empty');
-      parsedResponse.answer = {};
-    }
-
-    // Validate answer text
-    if (!parsedResponse.answer.text || typeof parsedResponse.answer.text !== 'string' || parsedResponse.answer.text.trim() === '') {
+    // Validate answer text (now answer is a string, not an object)
+    if (!parsedResponse.answer || typeof parsedResponse.answer !== 'string' || parsedResponse.answer.trim() === '') {
       logger.warn('Invalid or missing answer text', {
-        has_text: !!parsedResponse.answer.text,
-        text_type: typeof parsedResponse.answer.text,
-        text_length: parsedResponse.answer.text?.length || 0,
+        has_answer: !!parsedResponse.answer,
+        answer_type: typeof parsedResponse.answer,
+        answer_length: parsedResponse.answer?.length || 0,
         full_response: JSON.stringify(parsedResponse)
       });
       
@@ -308,164 +257,121 @@ async function generateFinalAnswer(finalPrompt) {
       const bookData = finalPrompt.includes('BOOK SOURCES:');
       
       if (webData) {
-        parsedResponse.answer.text = 'Based on web sources: The query asks about naval ships and their wartime efforts. Web sources indicate that naval rescue ships were involved in various wartime operations including convoy operations, evacuations, and combat engagements during World War II and the Vietnam War.';
+        parsedResponse.answer = 'Based on web sources: The query asks about naval ships and their wartime efforts. Web sources indicate that naval rescue ships were involved in various wartime operations including convoy operations, evacuations, and combat engagements during World War II and the Vietnam War.';
       } else {
-        parsedResponse.answer.text = 'No relevant information found.';
+        parsedResponse.answer = 'No relevant information found.';
       }
-    } else if (parsedResponse.answer.text.length < 10) {
+    } else if (parsedResponse.answer.length < 10) {
       logger.warn('Answer text suspiciously short:', {
-        text: parsedResponse.answer.text,
-        length: parsedResponse.answer.text.length
+        text: parsedResponse.answer,
+        length: parsedResponse.answer.length
       });
     }
 
-    // Validate citations
-    if (!Array.isArray(parsedResponse.answer.citations)) {
-      logger.warn('Invalid citations format, initializing empty array');
-      parsedResponse.answer.citations = [];
-    } else {
-      // Filter out invalid citations
-      parsedResponse.answer.citations = parsedResponse.answer.citations.filter(citation => {
-        const isValid = citation && 
-                       typeof citation === 'object' &&
-                       typeof citation.id === 'string' &&
-                       typeof citation.source === 'string';
-        if (!isValid) {
-          logger.warn('Removing invalid citation:', { citation });
-        }
-        return isValid;
-      });
+    // Initialize missing arrays if not present
+    if (!Array.isArray(parsedResponse.missing_information)) {
+      parsedResponse.missing_information = [];
     }
-
-    // Initialize and validate source analysis
-    parsedResponse.source_analysis = {
-      book_sources_used: false,
-      web_sources_used: false,
-      missing_information: [],
-      source_conflicts: [],
-      ...parsedResponse.source_analysis
-    };
-
-    // Ensure correct types for source analysis fields
-    parsedResponse.source_analysis.book_sources_used = 
-      !!parsedResponse.source_analysis.book_sources_used;
-    parsedResponse.source_analysis.web_sources_used = 
-      !!parsedResponse.source_analysis.web_sources_used;
-    parsedResponse.source_analysis.missing_information = 
-      Array.isArray(parsedResponse.source_analysis.missing_information) ? 
-      parsedResponse.source_analysis.missing_information.filter(x => typeof x === 'string') : [];
-    parsedResponse.source_analysis.source_conflicts = 
-      Array.isArray(parsedResponse.source_analysis.source_conflicts) ? 
-      parsedResponse.source_analysis.source_conflicts.filter(x => typeof x === 'string') : [];
-
-    // Verify citations match the text
-    const citationsInText = (parsedResponse.answer.text.match(/\[\w+\d*\]/g) || [])
-      .map(c => c.slice(1, -1));
-    const citationIds = parsedResponse.answer.citations.map(c => c.id);
-    
-    const missingCitations = citationsInText.filter(id => !citationIds.includes(id));
-    const unusedCitations = citationIds.filter(id => !citationsInText.includes(id));
-    
-    if (missingCitations.length > 0 || unusedCitations.length > 0) {
-      logger.warn('Citation mismatch:', {
-        missing_citations: missingCitations,
-        unused_citations: unusedCitations
-      });
+    if (!Array.isArray(parsedResponse.source_conflicts)) {
+      parsedResponse.source_conflicts = [];
     }
     
     // Log successful parsing
     logger.info('Successfully parsed LLM response:', {
-      text_length: parsedResponse?.answer?.text?.length || 0,
-      citations_count: parsedResponse?.answer?.citations?.length || 0,
-      has_missing_info: parsedResponse?.source_analysis?.missing_information?.length > 0,
-      has_conflicts: parsedResponse?.source_analysis?.source_conflicts?.length > 0
+      text_length: parsedResponse?.answer?.length || 0,
+      has_missing_info: parsedResponse?.missing_information?.length > 0,
+      has_conflicts: parsedResponse?.source_conflicts?.length > 0
     });
     
     // Ensure we have a valid response structure
-    if (!parsedResponse?.answer?.text) {
-      logger.warn('Missing or invalid answer text in response');
+    if (!parsedResponse?.answer) {
+      logger.warn('Missing or invalid answer in response');
       parsedResponse = {
-        answer: {
-          text: 'No valid response was generated.',
-          citations: []
-        },
-        source_analysis: {
-          book_sources_used: false,
-          web_sources_used: false,
-          missing_information: ['Failed to generate a valid response'],
-          source_conflicts: []
-        }
+        answer: 'No valid response was generated.',
+        missing_information: ['Failed to generate a valid response'],
+        source_conflicts: []
       };
     }
 
-    // Remove citations from the answer text as mentioned in the prompt
-    const cleanAnswer = parsedResponse.answer.text
-      .replace(/\s+/g, ' ')  // Normalize whitespace
-      .replace(/\[\w+\d*\]/g, '')  // Remove all citations like [WEB1], [doc_2], etc.
-      .replace(/\s{2,}/g, ' ')  // Clean up extra spaces left by citation removal
-      .trim();
-    
-    // Group citations by source type
-    const webCitations = parsedResponse.answer.citations
-      .filter(c => c.id.startsWith('WEB'));
-    const bookCitations = parsedResponse.answer.citations
-      .filter(c => !c.id.startsWith('WEB'));
-    
-    // Format the final answer
-    let formattedAnswer = cleanAnswer;
+    // The answer is now a plain string, no need to clean citations
+    let formattedAnswer = parsedResponse.answer;
 
-    // Add references section if we have any
-    if (parsedResponse.answer.citations.length > 0) {
+    // Extract sources from the prompt to build references
+    const bookSources = [];
+    const webSources = [];
+    
+    // Extract book sources
+    const bookSourceMatches = finalPrompt.match(/\[([^\]]+)\] From ([^:]+):/g);
+    if (bookSourceMatches) {
+      bookSourceMatches.forEach(match => {
+        const idMatch = match.match(/\[([^\]]+)\]/);
+        const sourceMatch = match.match(/From ([^:]+):/);
+        if (idMatch && sourceMatch && !idMatch[1].startsWith('WEB')) {
+          bookSources.push({
+            id: idMatch[1],
+            source: sourceMatch[1].trim()
+          });
+        }
+      });
+    }
+    
+    // Extract web sources
+    const webSourceMatches = finalPrompt.match(/\[(WEB\d+)\] From ([^(]+) \(Relevance: \d+\/10\):/g);
+    if (webSourceMatches) {
+      webSourceMatches.forEach(match => {
+        const idMatch = match.match(/\[(WEB\d+)\]/);
+        const sourceMatch = match.match(/From ([^(]+) \(/);
+        if (idMatch && sourceMatch) {
+          webSources.push({
+            id: idMatch[1],
+            source: sourceMatch[1].trim()
+          });
+        }
+      });
+    }
+
+    // Add references section if we have any sources
+    if (bookSources.length > 0 || webSources.length > 0) {
       formattedAnswer += '\n\nReferences:';
       
-      // Add web references first for web-focused queries
-      if (webCitations.length > 0) {
-        formattedAnswer += '\nWeb Sources:';
-        formattedAnswer += '\n' + webCitations
-          .sort((a, b) => a.id.localeCompare(b.id))
-          .map(citation => `[${citation.id}] ${citation.source}${citation.relevance ? ` - ${citation.relevance}` : ''}`)
-          .join('\n');
+      if (webSources.length > 0) {
+        formattedAnswer += '\n\nWeb Sources:';
+        webSources.forEach(source => {
+          formattedAnswer += `\n- [${source.id}] ${source.source}`;
+        });
       }
       
-      // Add book references
-      if (bookCitations.length > 0) {
-        formattedAnswer += '\nBook Sources:';
-        formattedAnswer += '\n' + bookCitations
-          .sort((a, b) => a.id.localeCompare(b.id))
-          .map(citation => `[${citation.id}] ${citation.source}${citation.relevance ? ` - ${citation.relevance}` : ''}`)
-          .join('\n');
+      if (bookSources.length > 0) {
+        formattedAnswer += '\n\nBook Sources:';
+        bookSources.forEach(source => {
+          formattedAnswer += `\n- [${source.id}] ${source.source}`;
+        });
       }
     }
 
     // Add missing information if any
-    if (parsedResponse.source_analysis.missing_information.length > 0) {
+    if (parsedResponse.missing_information && parsedResponse.missing_information.length > 0) {
       formattedAnswer += '\n\nMissing Information:';
-      formattedAnswer += '\n' + parsedResponse.source_analysis.missing_information
+      formattedAnswer += '\n' + parsedResponse.missing_information
         .map(info => `- ${info}`)
         .join('\n');
     }
 
     // Add source conflicts if any
-    if (parsedResponse.source_analysis.source_conflicts.length > 0) {
+    if (parsedResponse.source_conflicts && parsedResponse.source_conflicts.length > 0) {
       formattedAnswer += '\n\nSource Conflicts:';
-      formattedAnswer += '\n' + parsedResponse.source_analysis.source_conflicts
+      formattedAnswer += '\n' + parsedResponse.source_conflicts
         .map(conflict => `- ${conflict}`)
         .join('\n');
     }
-
-    // Add source analysis
-    formattedAnswer += '\n\nSource Analysis:';
-    formattedAnswer += `\n- Book sources ${parsedResponse.source_analysis.book_sources_used ? 'were' : 'were not'} used`;
-    formattedAnswer += `\n- Web sources ${parsedResponse.source_analysis.web_sources_used ? 'were' : 'were not'} used`;
     
     formattedAnswer = formattedAnswer.trim();
     
     logger.info('Final answer generated:', { 
       answer_length: formattedAnswer.length,
       prompt_length: finalPrompt.length,
-      citations_count: parsedResponse.answer.citations.length,
-      has_missing_info: parsedResponse.source_analysis.missing_information.length > 0,
-      has_conflicts: parsedResponse.source_analysis.source_conflicts.length > 0
+      has_missing_info: parsedResponse.missing_information?.length > 0,
+      has_conflicts: parsedResponse.source_conflicts?.length > 0
     });
     
     return formattedAnswer;
