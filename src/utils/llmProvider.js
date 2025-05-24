@@ -153,35 +153,95 @@ async function generateCompletion(prompt, options = {}) {
       
       // For Ollama, we need to handle streaming to get complete responses
       let fullResponse = '';
-      const stream = await ollamaClient.chat({
-        model: OLLAMA_LLM_MODEL,
-        messages,
-        options: {
-          temperature,
-          num_predict: 0 // No token limit - stream until complete
-        },
-        stream: true
+      let lastActivity = Date.now();
+      const TIMEOUT = 30000; // 30 seconds timeout
+      const ACTIVITY_TIMEOUT = 5000; // 5 seconds without activity is timeout
+      
+      // Create a timeout promise
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Response timeout after 30 seconds')), TIMEOUT);
       });
 
-      let buffer = '';
-      for await (const part of stream) {
-        if (part.message?.content) {
-          buffer += part.message.content;
-          // Try to find complete JSON objects as we go
-          if (buffer.includes('{') && buffer.includes('}')) {
-            const extracted = extractJsonString(buffer);
-            if (extracted) {
-              try {
-                JSON.parse(extracted); // Validate it's complete JSON
-                fullResponse = extracted;
-                break; // We found a complete JSON object
-              } catch (e) {
-                // Not complete JSON yet, continue collecting
+      // Create the stream
+      const streamPromise = new Promise(async (resolve, reject) => {
+        try {
+          const stream = await ollamaClient.chat({
+            model: OLLAMA_LLM_MODEL,
+            messages,
+            options: {
+              temperature,
+              num_predict: 0 // No token limit - stream until complete
+            },
+            stream: true
+          });
+
+          let buffer = '';
+          let jsonStarted = false;
+          let bracketCount = 0;
+
+          for await (const part of stream) {
+            // Update activity timestamp
+            lastActivity = Date.now();
+
+            if (part.message?.content) {
+              buffer += part.message.content;
+
+              // Check for activity timeout
+              if (Date.now() - lastActivity > ACTIVITY_TIMEOUT) {
+                reject(new Error('No activity for 5 seconds'));
+                break;
+              }
+
+              // Look for start of JSON
+              if (!jsonStarted && buffer.includes('{')) {
+                jsonStarted = true;
+                bracketCount = 1;
+                buffer = buffer.slice(buffer.indexOf('{'));
+              }
+
+              // Count brackets if we've started JSON
+              if (jsonStarted) {
+                for (const char of part.message.content) {
+                  if (char === '{') bracketCount++;
+                  if (char === '}') bracketCount--;
+
+                  // If we've found a complete JSON object
+                  if (bracketCount === 0) {
+                    const extracted = extractJsonString(buffer);
+                    if (extracted) {
+                      try {
+                        JSON.parse(extracted); // Validate it's complete JSON
+                        fullResponse = extracted;
+                        resolve(fullResponse);
+                        return;
+                      } catch (e) {
+                        // Not valid JSON, continue collecting
+                      }
+                    }
+                  }
+                }
               }
             }
           }
+
+          // If we get here without finding valid JSON, try one last time with the full buffer
+          const extracted = extractJsonString(buffer);
+          if (extracted) {
+            try {
+              JSON.parse(extracted); // Validate it's complete JSON
+              fullResponse = extracted;
+              resolve(fullResponse);
+              return;
+            } catch (e) {
+              // Fall through to error
+            }
+          }
+
+          reject(new Error('No valid JSON found in response'));
+        } catch (error) {
+          reject(error);
         }
-      }
+      });
       
       // If we didn't find complete JSON in the stream, use the full buffer
       if (!fullResponse && buffer) {

@@ -7,15 +7,15 @@ const logger = require('./logger');
  * @returns {Object} Error response for client
  */
 function handlePipelineError(error, context) {
-  // Extract relevant information
+  // Extract relevant information with defaults
   const {
-    query,
-    projectId,
-    expandedQueries,
-    uniqueDocs,
-    webResults,
-    processedContext
-  } = context;
+    query = '',
+    projectId = '',
+    expandedQueries = [],
+    uniqueDocs = [],
+    webResults = null,
+    processedContext = null
+  } = context || {};
 
   // Build error context with pipeline state
   const errorContext = {

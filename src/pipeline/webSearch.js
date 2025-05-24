@@ -308,12 +308,20 @@ async function analyzeSearchResult(result, index, originalQuery) {
 
     return enhancedAnalysis;
   } catch (error) {
-    logger.warn(`Failed to analyze result ${index}`, { error: error.message });
-    return {
+    logger.warn(`Failed to analyze result ${index}`, { 
+      error: error.message,
+      title: result.title,
+      url: result.url,
+      content_length: result.content?.length || 0,
+      stack: error.stack
+    });
+    
+    // Try to provide basic analysis even on error
+    const basicAnalysis = {
       is_relevant: false,
-      relevance_score: 0,
-      key_points: [],
-      reasoning: "Analysis failed: " + error.message,
+      relevance_score: 1, // Give it a minimal score instead of 0
+      key_points: [`Error during analysis: ${error.message}`],
+      reasoning: "Analysis failed but content may still be relevant",
       result_index: index,
       url: result.url,
       title: result.title,
@@ -324,8 +332,22 @@ async function analyzeSearchResult(result, index, originalQuery) {
         time_period: 'unknown',
         chronological_order: false
       },
-      error: error.message
+      error: error.message,
+      content_preview: result.content ? result.content.substring(0, 200) + '...' : 'No content'
     };
+    
+    // If it's a naval query and the title/content seems relevant, bump the score
+    if (isNavalQuery && (
+      result.title.toLowerCase().includes('naval') ||
+      result.title.toLowerCase().includes('ship') ||
+      result.title.toLowerCase().includes('war') ||
+      (result.content && result.content.toLowerCase().includes('naval'))
+    )) {
+      basicAnalysis.relevance_score = 2;
+      basicAnalysis.reasoning = "Title/content contains naval terms despite analysis error";
+    }
+    
+    return basicAnalysis;
   }
 }
 
@@ -438,10 +460,37 @@ async function summarizeWebResults(searchResults, originalQuery) {
     });
 
     if (allRelevantAnalyses.length === 0) {
+      logger.warn('No relevant results found after analysis', {
+        total_processed: totalProcessed,
+        failed_analyses: failedAnalyses,
+        min_score_threshold: MIN_RELEVANCE_SCORE,
+        original_results_count: searchResults.length
+      });
+      
+      // Try to return at least some information from all results
+      const allAnalyses = [];
+      for (let i = 0; i < Math.min(5, searchResults.length); i++) {
+        allAnalyses.push({
+          title: searchResults[i].title,
+          url: searchResults[i].url,
+          content_preview: searchResults[i].content.substring(0, 200) + '...'
+        });
+      }
+      
       return {
-        summary: 'No relevant web search results found.',
+        summary: 'Web search found results but none met relevance threshold. Consider manual review.',
         facts: [],
-        source_urls: []
+        source_urls: allAnalyses.map((r, idx) => ({
+          id: `WEB${idx + 1}`,
+          url: r.url,
+          title: r.title,
+          relevance_score: 0
+        })),
+        metadata: {
+          threshold_used: MIN_RELEVANCE_SCORE,
+          total_results: searchResults.length,
+          results_preview: allAnalyses
+        }
       };
     }
 

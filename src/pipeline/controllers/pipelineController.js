@@ -150,7 +150,7 @@ class PipelineController {
    * @returns {Promise<Object>} Generated answer
    */
   async generateAnswer(originalQuery, context) {
-    const { classification, expanded_query, synthesized, thinking_depth } = context;
+    const { classification, expanded_query, synthesized, thinking_depth, web_results } = context;
 
     // Build type-specific prompt sections
     const sections = [];
@@ -174,6 +174,23 @@ class PipelineController {
 
     if (synthesized.analysis) {
       sections.push(`Analysis:\n${JSON.stringify(synthesized.analysis, null, 2)}`);
+    }
+
+    // Add web search results if available
+    if (web_results && web_results.summary) {
+      sections.push(`Web Search Results:\n${web_results.summary}`);
+      
+      if (web_results.facts && web_results.facts.length > 0) {
+        sections.push(`Web Facts:\n${web_results.facts.map(f => 
+          `- ${f.text} (Relevance: ${f.relevance})`
+        ).join('\n')}`);
+      }
+      
+      if (web_results.source_urls && web_results.source_urls.length > 0) {
+        sections.push(`Web Sources:\n${web_results.source_urls.map(s => 
+          `- [${s.id}] ${s.title} (Score: ${s.relevance_score})`
+        ).join('\n')}`);
+      }
     }
 
     // Add query-type specific instructions
