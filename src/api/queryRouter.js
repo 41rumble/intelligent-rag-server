@@ -5,7 +5,7 @@ const { expandQuery } = require('../pipeline/queryExpander');
 const { retrieveDocuments } = require('../pipeline/documentRetriever');
 const { searchAndSummarize } = require('../pipeline/webSearch');
 const { handleOversizedContext } = require('../pipeline/knowledgeCompressor');
-const { generateFinalAnswer } = require('../pipeline/finalPromptBuilder');
+const { buildFinalPrompt, generateFinalAnswer } = require('../pipeline/finalPromptBuilder');
 
 const router = express.Router();
 
@@ -124,55 +124,21 @@ router.post('/', async (req, res) => {
       is_external_query: isExternalQuery
     });
 
-    // Step 5: Generate final answer with citations
-    const finalPrompt = `
-    QUERY INFORMATION:
-    Original Query: "${query}"
-    Project: "${projectId}"
-    Query Type: ${isNavalQuery ? 'Naval/Military History' : 'General'}
-    ${hasTimeContext ? 'Time Context: Pay special attention to dates and chronological information' : ''}
-    ${isExternalQuery ? 'External Focus: Query asks about events outside the book context' : ''}
+    // Step 5: Build final prompt and generate answer
+    const queryInfo = {
+      original_query: query,
+      project_id: projectId,
+      query_type: isNavalQuery ? 'Naval/Military History' : 'General',
+      focus: isExternalQuery ? 'Information outside book context' : 'Book-related information'
+    };
 
-    ${processedContext.source_snippets.length > 0 ? `
-    CONTEXT FROM DOCUMENTS:
-    ${processedContext.source_snippets.map(snippet => 
-      `[${snippet.id}] From ${snippet.source}:
-      "${snippet.text}"`
-    ).join('\n\n')}
-
-    KEY POINTS:
-    ${processedContext.key_points.map((p, i) => `[KP${i+1}] ${p}`).join('\n')}
-    ` : 'NO RELEVANT BOOK CONTEXT FOUND'}
-
-    ${webResults ? `
-    ADDITIONAL CONTEXT FROM WEB:
-    ${webResults.summary}
-    
-    WEB SOURCES:
-    ${webResults.source_urls.map((url, i) => 
-      `[WEB${i+1}] ${url.title || ''}\n${url.url || url}`
-    ).join('\n\n')}
-    ` : 'NO WEB SOURCES AVAILABLE'}
-
-    INSTRUCTIONS:
-    1. Based ONLY on the above context, provide a clear and concise answer
-    2. Use [source_id] citations after EVERY fact or quote
-    3. Format citations as [id1][id2] if multiple sources support a fact
-    4. If information is missing or unclear, acknowledge this
-    5. Structure the answer with clear paragraphs
-    6. End with a "Sources:" section listing all cited sources
-    7. ${isNavalQuery ? 'Focus on military operations, wartime activities, and ship deployments' : ''}
-    8. ${hasTimeContext ? 'Pay special attention to dates and chronological order' : ''}
-    9. ${isExternalQuery ? 'Clearly distinguish between book events and external historical events' : ''}
-
-    Example format:
-    "Asa Jennings arrived in Smyrna in August 1922 [bio_12]. During the Great Fire, he worked with both Greek and Turkish authorities [doc_45][web_2] to coordinate evacuation efforts..."
-
-    Sources:
-    [bio_12] Character biography
-    [doc_45] Chapter 3 excerpt
-    [web_2] Historical article
-    `;
+    // Build the final prompt using the proper function
+    const { prompt: finalPrompt } = await buildFinalPrompt(
+      queryInfo,
+      processedContext,
+      webResults,
+      null // No evaluation info for now
+    );
 
     // Generate final answer with error handling
     let answer;
