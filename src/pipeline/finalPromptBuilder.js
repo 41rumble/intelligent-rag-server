@@ -165,11 +165,12 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     5. The answer field is a string, not an object
 
     ANSWER REQUIREMENTS:
-    1. Provide a comprehensive answer based ONLY on the provided context
+    1. Provide a comprehensive, conversational answer based ONLY on the provided context
     2. Do NOT include citations or reference markers in your answer
-    3. Write in clear, natural language
-    4. If information is missing or unclear, acknowledge this in the missing_information array
-    5. Focus on directly answering the user's query
+    3. Write in a natural, engaging style as if having a conversation
+    4. Focus on telling the story or explaining the information clearly
+    5. Only use missing_information array for truly significant gaps in knowledge
+    6. Keep the answer focused on what the user asked about
 
     EXAMPLE of correct response format:
     {
@@ -315,19 +316,19 @@ async function generateFinalAnswer(finalPrompt) {
       });
     }
     
-    // Extract web sources
-    const webSourceMatches = finalPrompt.match(/\[(WEB\d+)\] From ([^(]+) \(Relevance: \d+\/10\):/g);
-    if (webSourceMatches) {
-      webSourceMatches.forEach(match => {
-        const idMatch = match.match(/\[(WEB\d+)\]/);
-        const sourceMatch = match.match(/From ([^(]+) \(/);
-        if (idMatch && sourceMatch) {
-          webSources.push({
-            id: idMatch[1],
-            source: sourceMatch[1].trim()
-          });
-        }
-      });
+    // Extract web sources - the format is [WEB1] From Title (Relevance: X/10):
+    const webSourceRegex = /\[(WEB\d+)\] From ([^(]+) \(Relevance: \d+\/10\):/g;
+    let webMatch;
+    while ((webMatch = webSourceRegex.exec(finalPrompt)) !== null) {
+      const id = webMatch[1];
+      const title = webMatch[2].trim();
+      // Avoid duplicates
+      if (!webSources.some(s => s.id === id)) {
+        webSources.push({
+          id: id,
+          source: title
+        });
+      }
     }
 
     // Add references section if we have any sources
@@ -335,34 +336,32 @@ async function generateFinalAnswer(finalPrompt) {
       formattedAnswer += '\n\nReferences:';
       
       if (webSources.length > 0) {
-        formattedAnswer += '\n\nWeb Sources:';
         webSources.forEach(source => {
-          formattedAnswer += `\n- [${source.id}] ${source.source}`;
+          formattedAnswer += `\n• ${source.source}`;
         });
       }
       
       if (bookSources.length > 0) {
-        formattedAnswer += '\n\nBook Sources:';
         bookSources.forEach(source => {
-          formattedAnswer += `\n- [${source.id}] ${source.source}`;
+          formattedAnswer += `\n• ${source.source}`;
         });
       }
     }
 
-    // Add missing information if any
-    if (parsedResponse.missing_information && parsedResponse.missing_information.length > 0) {
-      formattedAnswer += '\n\nMissing Information:';
-      formattedAnswer += '\n' + parsedResponse.missing_information
-        .map(info => `- ${info}`)
-        .join('\n');
-    }
-
-    // Add source conflicts if any
-    if (parsedResponse.source_conflicts && parsedResponse.source_conflicts.length > 0) {
-      formattedAnswer += '\n\nSource Conflicts:';
-      formattedAnswer += '\n' + parsedResponse.source_conflicts
-        .map(conflict => `- ${conflict}`)
-        .join('\n');
+    // Only add missing information or conflicts if they're significant
+    // Don't add these sections for normal answers to keep it conversational
+    if (parsedResponse.missing_information && 
+        parsedResponse.missing_information.length > 0 && 
+        parsedResponse.missing_information.some(info => 
+          !info.toLowerCase().includes('no missing') && 
+          !info.toLowerCase().includes('all necessary'))) {
+      // Only add if there's actually missing info, not just boilerplate
+      const significantMissing = parsedResponse.missing_information.filter(info => 
+        !info.toLowerCase().includes('no missing') && 
+        !info.toLowerCase().includes('all necessary'));
+      if (significantMissing.length > 0) {
+        formattedAnswer += '\n\nNote: ' + significantMissing.join('; ');
+      }
     }
     
     formattedAnswer = formattedAnswer.trim();
