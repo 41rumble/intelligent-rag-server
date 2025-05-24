@@ -66,25 +66,33 @@ router.post('/', async (req, res) => {
       summaryLength: webResults?.summary?.length || 0
     });
 
-    // Step 4: Process all context
+    // Step 4: Prepare context without aggressive compression
+    // Instead of compressing, we'll pass the full documents to the final prompt builder
     let processedContext;
     try {
-      processedContext = await handleOversizedContext([
-        ...uniqueDocs,
-        ...(webResults ? [{ 
-          text: webResults.summary,
-          source: 'web',
-          metadata: { urls: webResults.source_urls }
-        }] : [])
-      ], query);
+      // Create a structure that preserves all the information
+      processedContext = {
+        compressed_text: '', // We'll let the final prompt builder handle this
+        key_points: [],
+        source_ids: uniqueDocs.map(doc => doc._id),
+        source_snippets: uniqueDocs.map(doc => ({
+          id: doc._id,
+          text: doc.text || doc.content || '', // Full text, not compressed
+          source: doc.source || 'book',
+          relevance: doc.relevance || 1.0,
+          type: doc.type,
+          metadata: doc.metadata || {}
+        })),
+        full_documents: uniqueDocs // Pass the full documents
+      };
 
-      logger.info('Context processed:', {
-        contextLength: processedContext?.compressed_text?.length || 0,
-        keyPoints: processedContext?.key_points?.length || 0,
-        sources: processedContext?.source_ids?.length || 0
+      logger.info('Context prepared (no compression):', {
+        docCount: uniqueDocs.length,
+        totalTextLength: uniqueDocs.reduce((sum, doc) => sum + (doc.text?.length || 0), 0),
+        sources: processedContext.source_ids
       });
     } catch (error) {
-      logger.warn('Error processing context:', {
+      logger.warn('Error preparing context:', {
         error: error.message,
         uniqueDocs: uniqueDocs.length,
         hasWebResults: !!webResults

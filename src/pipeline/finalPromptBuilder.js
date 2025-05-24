@@ -22,14 +22,17 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     compressedKnowledge.compressed_text = compressedKnowledge.compressed_text || '';
     compressedKnowledge.source_snippets = compressedKnowledge.source_snippets || [];
     compressedKnowledge.key_points = compressedKnowledge.key_points || [];
+    compressedKnowledge.full_documents = compressedKnowledge.full_documents || [];
 
     // Log what we're working with
     logger.info('Building final prompt with:', {
       query: queryInfo.original_query,
       compressed_length: compressedKnowledge.compressed_text.length,
       snippets: compressedKnowledge.source_snippets.length,
+      full_documents: compressedKnowledge.full_documents?.length || 0,
       key_points: compressedKnowledge.key_points.length,
-      has_web: !!webSummary?.summary
+      has_web: !!webSummary?.summary,
+      using_full_docs: compressedKnowledge.full_documents?.length > 0
     });
 
     // Determine if RAG has relevant information
@@ -67,13 +70,23 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
         `NOTE: This query asks about events/information OUTSIDE the book's context,
         but no relevant web information was found.`) :
       // For book-focused queries, normal handling
-      (compressedKnowledge.source_snippets.length > 0 ? `
+      (compressedKnowledge.source_snippets.length > 0 || compressedKnowledge.full_documents?.length > 0 ? `
         BOOK SOURCES:
-        ${compressedKnowledge.source_snippets.map(snippet => 
-          `[${snippet.id}] From ${snippet.source}:
-          "${snippet.text}"
-          Relevance: ${snippet.relevance}`
-        ).join('\n\n')}
+        ${compressedKnowledge.full_documents?.length > 0 ? 
+          // Use full documents if available for richer content
+          compressedKnowledge.full_documents.map(doc => 
+            `[${doc._id}] From ${doc.source || 'book'}:
+            "${doc.text || doc.content || ''}"
+            Type: ${doc.type || 'text'}
+            ${doc.metadata?.chapter ? `Chapter: ${doc.metadata.chapter}` : ''}
+            ${doc.metadata?.page ? `Page: ${doc.metadata.page}` : ''}`
+          ).join('\n\n') :
+          // Fall back to snippets if no full documents
+          compressedKnowledge.source_snippets.map(snippet => 
+            `[${snippet.id}] From ${snippet.source}:
+            "${snippet.text}"
+            Relevance: ${snippet.relevance}`
+          ).join('\n\n')}
         
         ${compressedKnowledge.key_points.length > 0 ? `
         KEY POINTS FROM BOOKS:
@@ -165,12 +178,14 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     5. The answer field is a string, not an object
 
     ANSWER REQUIREMENTS:
-    1. Provide a comprehensive, conversational answer based ONLY on the provided context
-    2. Do NOT include citations or reference markers in your answer
-    3. Write in a natural, engaging style as if having a conversation
-    4. Focus on telling the story or explaining the information clearly
-    5. Only use missing_information array for truly significant gaps in knowledge
-    6. Keep the answer focused on what the user asked about
+    1. Provide a DETAILED and COMPREHENSIVE answer based on ALL the provided context
+    2. Do NOT include citations or reference markers in your answer text
+    3. Write in a natural, engaging style with rich detail and context
+    4. Include relevant background information, specific details, dates, names, and events
+    5. Aim for a thorough response that fully utilizes the research provided
+    6. Connect different pieces of information to tell a complete story
+    7. Your answer should be substantial - at least 3-4 paragraphs when the sources support it
+    8. Only use missing_information array for truly significant gaps in knowledge
 
     EXAMPLE of correct response format:
     {
@@ -225,9 +240,9 @@ async function generateFinalAnswer(finalPrompt) {
 
     // Generate the answer with more focused parameters
     const parsedResponse = await generateStructuredResponse(finalPrompt, {
-      temperature: 0.3, // Even lower temperature for more focused answers
-      maxTokens: 2000,  // Allow more space for citations and analysis
-      systemPrompt: "You are a JSON-only assistant that focuses on direct answers with citations."
+      temperature: 0.4, // Slightly higher for more natural, detailed responses
+      maxTokens: 4000,  // Much more space for comprehensive answers
+      systemPrompt: "You are a JSON-only assistant that provides comprehensive, detailed answers based on extensive research."
     });
 
     // Validate and normalize the response structure
@@ -333,17 +348,21 @@ async function generateFinalAnswer(finalPrompt) {
 
     // Add references section if we have any sources
     if (bookSources.length > 0 || webSources.length > 0) {
-      formattedAnswer += '\n\nReferences:';
+      formattedAnswer += '\n\n';
+      
+      let citationNumber = 1;
       
       if (webSources.length > 0) {
         webSources.forEach(source => {
-          formattedAnswer += `\n• ${source.source}`;
+          formattedAnswer += `\n[${citationNumber}] ${source.source}`;
+          citationNumber++;
         });
       }
       
       if (bookSources.length > 0) {
         bookSources.forEach(source => {
-          formattedAnswer += `\n• ${source.source}`;
+          formattedAnswer += `\n[${citationNumber}] ${source.source}`;
+          citationNumber++;
         });
       }
     }
