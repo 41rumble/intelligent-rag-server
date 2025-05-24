@@ -180,13 +180,13 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
 
     CITATION REQUIREMENTS:
     1. Every factual statement must have a citation in the citations array
-    2. Citations in the text should use [source_id] format
+    2. Citations in the text should use [source_id] format (e.g., [WEB1], [doc_2])
     3. Multiple sources use format: [WEB1][bio_2]
     4. Each citation must reference a source from the provided context
     5. The citations array must include ALL sources used, with explanations
     
-    Note: The citations will be removed from the displayed answer text,
-    but are required to track which facts came from which sources.
+    IMPORTANT: Include citations inline with your answer text (e.g., "The ship served in WWII [WEB1]").
+    These will be automatically removed from the final display but are needed for source tracking.
 
     CRITICAL: Your response must be EXACTLY like this example, but with your content:
     {
@@ -398,12 +398,11 @@ async function generateFinalAnswer(finalPrompt) {
       };
     }
 
-    // Clean up the answer text while preserving citations
+    // Remove citations from the answer text as mentioned in the prompt
     const cleanAnswer = parsedResponse.answer.text
       .replace(/\s+/g, ' ')  // Normalize whitespace
-      .replace(/\[\s+/g, '[')  // Remove space after [
-      .replace(/\s+\]/g, ']')  // Remove space before ]
-      .replace(/\]\s*\[/g, '][')  // Combine adjacent citations
+      .replace(/\[\w+\d*\]/g, '')  // Remove all citations like [WEB1], [doc_2], etc.
+      .replace(/\s{2,}/g, ' ')  // Clean up extra spaces left by citation removal
       .trim();
     
     // Group citations by source type
