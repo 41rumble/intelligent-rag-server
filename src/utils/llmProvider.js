@@ -153,6 +153,7 @@ async function generateCompletion(prompt, options = {}) {
       
       // For Ollama, we need to handle streaming to get complete responses
       let fullResponse = '';
+      let buffer = ''; // Move buffer to outer scope
       let lastActivity = Date.now();
       const TIMEOUT = 30000; // 30 seconds timeout
       const ACTIVITY_TIMEOUT = 5000; // 5 seconds without activity is timeout
@@ -175,7 +176,6 @@ async function generateCompletion(prompt, options = {}) {
             stream: true
           });
 
-          let buffer = '';
           let jsonStarted = false;
           let bracketCount = 0;
 
@@ -242,6 +242,20 @@ async function generateCompletion(prompt, options = {}) {
           reject(error);
         }
       });
+      
+      // Wait for either the stream to complete or timeout
+      try {
+        await Promise.race([streamPromise, timeoutPromise]);
+      } catch (error) {
+        logger.warn('Stream error or timeout:', error.message);
+        // If we have partial content, try to use it
+        if (buffer) {
+          const extracted = extractJsonString(buffer);
+          if (extracted) {
+            fullResponse = extracted;
+          }
+        }
+      }
       
       // If we didn't find complete JSON in the stream, use the full buffer
       if (!fullResponse && buffer) {
