@@ -38,7 +38,7 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     // Determine if RAG has relevant information
     const hasRelevantRAG = compressedKnowledge.source_snippets.some(s => 
       s.relevance && (
-        s.relevance.toLowerCase().includes('high') || 
+        (typeof s.relevance === 'string' && s.relevance.toLowerCase().includes('high')) || 
         (typeof s.relevance === 'number' && s.relevance >= 7)
       ));
     
@@ -116,7 +116,9 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
       
       const relevantFacts = webSummary.facts
         ?.filter(fact => fact.relevance && 
-          (isWebFocused ? true : fact.relevance.toLowerCase().includes('high'))) || [];
+          (isWebFocused ? true : 
+            (typeof fact.relevance === 'string' && fact.relevance.toLowerCase().includes('high')) ||
+            (typeof fact.relevance === 'number' && fact.relevance >= 7))) || [];
       
       context += `
       
