@@ -236,16 +236,17 @@ Please try rephrasing your question or being more specific about what you'd like
       }
     }));
 
-    // Format web sources
-    webSources = webResults ? webResults.source_urls.map((url, index) => ({
-      id: `web_${index + 1}`,
+    // Format web sources - use the same ID format as in the context
+    webSources = webResults ? webResults.source_urls.map((url) => ({
+      id: url.id, // Use the ID from webSearch.js (e.g., WEB1, WEB2)
       text: url.url || url,
       source: 'web',
-      relevance: 1.0,
+      relevance: url.relevance_score || 1.0,
       metadata: {
         type: 'web',
         url: url.url || url,
-        title: url.title || null
+        title: url.title || null,
+        relevance_score: url.relevance_score
       }
     })) : [];
 

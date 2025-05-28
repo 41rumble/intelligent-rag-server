@@ -181,17 +181,18 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
 
     ANSWER REQUIREMENTS:
     1. Provide a DETAILED and COMPREHENSIVE answer based on ALL the provided context
-    2. Do NOT include citations or reference markers in your answer text
+    2. Include inline citation markers like [1], [2], [3] etc. when referencing specific sources
     3. Write in a natural, engaging style with rich detail and context
     4. Include relevant background information, specific details, dates, names, and events
     5. Aim for a thorough response that fully utilizes the research provided
     6. Connect different pieces of information to tell a complete story
     7. Your answer should be substantial - at least 3-4 paragraphs when the sources support it
     8. Only use missing_information array for truly significant gaps in knowledge
+    9. Citation numbers should correspond to the source IDs in the context (e.g., [WEB1], [doc_123])
 
     EXAMPLE of correct response format:
     {
-      "answer": "The Great Fire of Smyrna began in September 1922. The fire started in the Armenian quarter and quickly spread through the city's narrow streets. Strong winds and dry conditions helped the fire spread rapidly, leading to widespread destruction.",
+      "answer": "The Great Fire of Smyrna began in September 1922 [doc_123]. The fire started in the Armenian quarter and quickly spread through the city's narrow streets [WEB1]. Strong winds and dry conditions helped the fire spread rapidly, leading to widespread destruction [doc_456].",
       "missing_information": ["Exact date and time the fire started", "Total number of casualties"],
       "source_conflicts": []
     }
@@ -348,26 +349,7 @@ async function generateFinalAnswer(finalPrompt) {
       }
     }
 
-    // Add references section if we have any sources
-    if (bookSources.length > 0 || webSources.length > 0) {
-      formattedAnswer += '\n\n';
-      
-      let citationNumber = 1;
-      
-      if (webSources.length > 0) {
-        webSources.forEach(source => {
-          formattedAnswer += `\n[${citationNumber}] ${source.source}`;
-          citationNumber++;
-        });
-      }
-      
-      if (bookSources.length > 0) {
-        bookSources.forEach(source => {
-          formattedAnswer += `\n[${citationNumber}] ${source.source}`;
-          citationNumber++;
-        });
-      }
-    }
+    // Don't add references to the answer text - Open WebUI handles citations through source_snippets
 
     // Only add missing information or conflicts if they're significant
     // Don't add these sections for normal answers to keep it conversational
