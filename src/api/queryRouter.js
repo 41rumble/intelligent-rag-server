@@ -2,10 +2,11 @@ const express = require('express');
 const logger = require('../utils/logger');
 const { handlePipelineError } = require('../utils/errorHandler');
 const { expandQuery } = require('../pipeline/queryExpander');
-const { retrieveDocuments } = require('../pipeline/documentRetriever');
+const { retrieveDocuments, bioSearch } = require('../pipeline/documentRetriever');
 const { searchAndSummarize } = require('../pipeline/webSearch');
 const { handleOversizedContext } = require('../pipeline/knowledgeCompressor');
 const { buildFinalPrompt, generateFinalAnswer } = require('../pipeline/finalPromptBuilder');
+const { extractEntities } = require('../pipeline/entityExtractor');
 
 const router = express.Router();
 
@@ -37,6 +38,14 @@ router.post('/', async (req, res) => {
       total: expandedQueries.length + 1 
     });
 
+    // Step 1b: Extract entities for bio search
+    const entities = await extractEntities(query);
+    logger.info('Extracted entities:', {
+      people: entities.people?.length || 0,
+      places: entities.places?.length || 0,
+      events: entities.events?.length || 0
+    });
+
     // Step 2: Search documents with all queries
     const allQueries = [query, ...expandedQueries];
     const allDocuments = [];
@@ -58,38 +67,94 @@ router.post('/', async (req, res) => {
       sources: uniqueDocs.map(d => d.source)
     });
 
-    // Step 3: Get relevant web content
-    const webQuery = `${query} book:"${projectId}"`;
+    // Step 2b: Search for biographical information
+    let bioResults = [];
+    if (entities.people && entities.people.length > 0) {
+      bioResults = await bioSearch(entities, projectId);
+      logger.info('Bio search completed:', {
+        people_searched: entities.people,
+        bios_found: bioResults.length,
+        bio_subjects: bioResults.map(bio => bio.name || bio._id)
+      });
+    }
+
+    // Step 3: Get relevant web content with book context
+    let webQuery = query;
+    let bookMetadata = null;
+    
+    // Try to get book metadata for enhanced web search
+    if (uniqueDocs.length > 0 && uniqueDocs[0].book_context) {
+      bookMetadata = uniqueDocs[0].book_context;
+      // Enhance web query with book context
+      webQuery = `${query} "${bookMetadata.book_title}" ${bookMetadata.book_author} ${bookMetadata.time_period?.start || ''}`;
+      logger.info('Enhanced web query with book context:', {
+        original: query,
+        enhanced: webQuery,
+        book_title: bookMetadata.book_title,
+        time_period: bookMetadata.time_period
+      });
+    } else {
+      // Fallback to simple book context
+      webQuery = `${query} book:"${projectId}"`;
+    }
+    
     const webResults = await searchAndSummarize(webQuery);
     logger.info('Web search completed', {
       hasResults: !!webResults,
-      summaryLength: webResults?.summary?.length || 0
+      summaryLength: webResults?.summary?.length || 0,
+      enhanced_query: webQuery
     });
 
-    // Step 4: Prepare context without aggressive compression
-    // Instead of compressing, we'll pass the full documents to the final prompt builder
+    // Step 4: Prepare context with all sources (RAG + Bios + Web)
     let processedContext;
     try {
+      // Combine RAG documents and bio results
+      const allSources = [...uniqueDocs];
+      
+      // Add bio results as additional sources
+      if (bioResults.length > 0) {
+        bioResults.forEach(bio => {
+          allSources.push({
+            _id: bio._id,
+            text: bio.text || bio.content || '',
+            source: 'biography',
+            relevance: 1.0, // High relevance since specifically requested
+            type: 'bio',
+            name: bio.name,
+            metadata: {
+              type: 'bio',
+              character_name: bio.name,
+              aliases: bio.aliases || []
+            }
+          });
+        });
+      }
+      
       // Create a structure that preserves all the information
       processedContext = {
         compressed_text: '', // We'll let the final prompt builder handle this
         key_points: [],
-        source_ids: uniqueDocs.map(doc => doc._id),
-        source_snippets: uniqueDocs.map(doc => ({
+        source_ids: allSources.map(doc => doc._id),
+        source_snippets: allSources.map(doc => ({
           id: doc._id,
           text: doc.text || doc.content || '', // Full text, not compressed
           source: doc.source || 'book',
           relevance: doc.relevance || 1.0,
           type: doc.type,
+          name: doc.name, // For bio sources
           metadata: doc.metadata || {}
         })),
-        full_documents: uniqueDocs // Pass the full documents
+        full_documents: allSources, // Pass all documents including bios
+        bio_results: bioResults // Keep separate reference for debugging
       };
 
-      logger.info('Context prepared (no compression):', {
-        docCount: uniqueDocs.length,
-        totalTextLength: uniqueDocs.reduce((sum, doc) => sum + (doc.text?.length || 0), 0),
-        sources: processedContext.source_ids
+      logger.info('Context prepared with all sources:', {
+        ragDocCount: uniqueDocs.length,
+        bioCount: bioResults.length,
+        totalSources: allSources.length,
+        totalTextLength: allSources.reduce((sum, doc) => sum + (doc.text?.length || 0), 0),
+        sourceTypes: allSources.map(doc => doc.type || doc.source),
+        source_ids: processedContext.source_ids
       });
     } catch (error) {
       logger.warn('Error preparing context:', {
@@ -232,13 +297,20 @@ Please try rephrasing your question or being more specific about what you'd like
       logger.info('Generating citation title for doc:', {
         id: doc._id || doc.id,
         type: doc.type,
+        source: doc.source,
         chapter_number: doc.chapter_number,
         chapter_id: doc.chapter_id,
         section_type: doc.section_type,
         name: doc.name,
         title: doc.title,
-        source: doc.source
+        character_name: doc.metadata?.character_name
       });
+      
+      // For biography sources (new integration)
+      if (doc.source === 'biography' || doc.type === 'bio') {
+        const name = doc.name || doc.metadata?.character_name || 'Character';
+        return `${name}`;
+      }
       
       // For chapter text documents
       if (doc.type === 'chapter_text' && doc.chapter_number) {
@@ -255,7 +327,7 @@ Please try rephrasing your question or being more specific about what you'd like
         return 'Chapter Synopsis';
       }
       
-      // For bio documents
+      // For bio documents (legacy format)
       if (doc.type === 'bio' && doc.name) {
         return `${doc.name}`;
       }
