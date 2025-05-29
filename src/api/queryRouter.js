@@ -228,6 +228,18 @@ Please try rephrasing your question or being more specific about what you'd like
 
     // Helper function to generate meaningful citation titles
     function generateCitationTitle(doc) {
+      // Log the document structure for debugging
+      logger.info('Generating citation title for doc:', {
+        id: doc._id || doc.id,
+        type: doc.type,
+        chapter_number: doc.chapter_number,
+        chapter_id: doc.chapter_id,
+        section_type: doc.section_type,
+        name: doc.name,
+        title: doc.title,
+        source: doc.source
+      });
+      
       // For chapter text documents
       if (doc.type === 'chapter_text' && doc.chapter_number) {
         return `Chapter ${doc.chapter_number}`;
@@ -236,7 +248,7 @@ Please try rephrasing your question or being more specific about what you'd like
       // For chapter synopsis documents
       if (doc.type === 'chapter_synopsis') {
         if (doc.title) {
-          return `Chapter Synopsis: ${doc.title}`;
+          return `${doc.title}`;
         } else if (doc.chapter_number) {
           return `Chapter ${doc.chapter_number} Synopsis`;
         }
@@ -245,7 +257,7 @@ Please try rephrasing your question or being more specific about what you'd like
       
       // For bio documents
       if (doc.type === 'bio' && doc.name) {
-        return `Biography of ${doc.name}`;
+        return `${doc.name}`;
       }
       
       // For special sections
@@ -254,20 +266,35 @@ Please try rephrasing your question or being more specific about what you'd like
         return sectionName;
       }
       
-      // Extract chapter info from ID if available (fallback)
+      // Extract chapter info from ID if available (fallback for chapter_text chunks)
       if (doc._id && doc._id.includes('chapter_')) {
         const chapterMatch = doc._id.match(/chapter_(\d+)/);
         if (chapterMatch) {
           return `Chapter ${chapterMatch[1]}`;
         }
+        
+        // Try alternative ID patterns like "TheGreatFire_chapter_01"
+        const altChapterMatch = doc._id.match(/chapter_0*(\d+)/);
+        if (altChapterMatch) {
+          return `Chapter ${parseInt(altChapterMatch[1])}`;
+        }
       }
       
-      // Fallback to type or generic name
-      if (doc.type === 'text' || doc.type === 'chapter_text') {
-        return 'Book Text';
+      // Try chapter_id field if available
+      if (doc.chapter_id) {
+        const chapterMatch = doc.chapter_id.match(/chapter_0*(\d+)/);
+        if (chapterMatch) {
+          return `Chapter ${parseInt(chapterMatch[1])}`;
+        }
       }
       
-      return doc.source || 'Book Source';
+      // Web sources
+      if (doc.source === 'web' && doc.title) {
+        return doc.title;
+      }
+      
+      // Fallback to source ID but keep it readable
+      return doc._id || doc.id || 'Source';
     }
 
     // Create a map of all sources by their original IDs
