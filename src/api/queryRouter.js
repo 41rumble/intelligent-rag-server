@@ -226,19 +226,67 @@ Please try rephrasing your question or being more specific about what you'd like
       ]
     };
 
+    // Helper function to generate meaningful citation titles
+    function generateCitationTitle(doc) {
+      // For chapter text documents
+      if (doc.type === 'chapter_text' && doc.chapter_number) {
+        return `Chapter ${doc.chapter_number}`;
+      }
+      
+      // For chapter synopsis documents
+      if (doc.type === 'chapter_synopsis') {
+        if (doc.title) {
+          return `Chapter Synopsis: ${doc.title}`;
+        } else if (doc.chapter_number) {
+          return `Chapter ${doc.chapter_number} Synopsis`;
+        }
+        return 'Chapter Synopsis';
+      }
+      
+      // For bio documents
+      if (doc.type === 'bio' && doc.name) {
+        return `Biography of ${doc.name}`;
+      }
+      
+      // For special sections
+      if (doc.section_type) {
+        const sectionName = doc.section_type.charAt(0).toUpperCase() + doc.section_type.slice(1);
+        return sectionName;
+      }
+      
+      // Extract chapter info from ID if available (fallback)
+      if (doc._id && doc._id.includes('chapter_')) {
+        const chapterMatch = doc._id.match(/chapter_(\d+)/);
+        if (chapterMatch) {
+          return `Chapter ${chapterMatch[1]}`;
+        }
+      }
+      
+      // Fallback to type or generic name
+      if (doc.type === 'text' || doc.type === 'chapter_text') {
+        return 'Book Text';
+      }
+      
+      return doc.source || 'Book Source';
+    }
+
     // Create a map of all sources by their original IDs
     const allSourcesById = new Map();
     
-    // Add book sources
+    // Add book sources with meaningful titles
     processedContext.source_snippets.forEach(snippet => {
+      // Get the full document for context if available
+      const fullDoc = processedContext.full_documents?.find(doc => doc._id === snippet.id) || snippet;
+      
       allSourcesById.set(snippet.id, {
         id: snippet.id,
         text: snippet.text,
         source: snippet.source,
+        title: generateCitationTitle(fullDoc),
         relevance: snippet.relevance || 1.0,
         metadata: {
           type: snippet.type || 'text',
-          chapter: snippet.chapter || null,
+          chapter: snippet.chapter || fullDoc.chapter_number || null,
           page: snippet.page || null
         }
       });
@@ -251,6 +299,7 @@ Please try rephrasing your question or being more specific about what you'd like
           id: url.id,
           text: url.url || url,
           source: 'web',
+          title: url.title || 'Web Source',
           relevance: url.relevance_score || 1.0,
           metadata: {
             type: 'web',
