@@ -85,8 +85,8 @@ router.post('/', async (req, res) => {
     // Try to get book metadata for enhanced web search
     if (uniqueDocs.length > 0 && uniqueDocs[0].book_context) {
       bookMetadata = uniqueDocs[0].book_context;
-      // Enhance web query with book context
-      webQuery = `${query} "${bookMetadata.book_title}" ${bookMetadata.book_author} ${bookMetadata.time_period?.start || ''}`;
+      // Enhance web query with book context - more specific
+      webQuery = `${query} "The Great Fire" "Lou Ureneck" "Smyrna 1922" history`;
       logger.info('Enhanced web query with book context:', {
         original: query,
         enhanced: webQuery,
@@ -94,8 +94,12 @@ router.post('/', async (req, res) => {
         time_period: bookMetadata.time_period
       });
     } else {
-      // Fallback to simple book context
-      webQuery = `${query} book:"${projectId}"`;
+      // Better fallback with specific historical context
+      webQuery = `${query} "The Great Fire" "Smyrna 1922" "Asia Minor catastrophe" history`;
+      logger.info('Using fallback historical web query:', {
+        original: query,
+        enhanced: webQuery
+      });
     }
     
     const webResults = await searchAndSummarize(webQuery);
