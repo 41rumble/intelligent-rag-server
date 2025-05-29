@@ -54,6 +54,10 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
       has_web_data: !!webSummary?.summary
     });
 
+    // Create source mapping for numeric citations
+    let sourceIndex = 1;
+    const sourceMapping = new Map(); // Maps original IDs to citation numbers
+    
     // Base context with more structured information
     let context = `
     QUERY INFORMATION:
@@ -74,19 +78,25 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
         BOOK SOURCES:
         ${compressedKnowledge.full_documents?.length > 0 ? 
           // Use full documents if available for richer content
-          compressedKnowledge.full_documents.map(doc => 
-            `[${doc._id}] From ${doc.source || 'book'}:
+          compressedKnowledge.full_documents.map(doc => {
+            sourceMapping.set(doc._id, sourceIndex);
+            const citation = `[${sourceIndex}]`;
+            sourceIndex++;
+            return `${citation} From ${doc.source || 'book'}:
             "${doc.text || doc.content || ''}"
             Type: ${doc.type || 'text'}
             ${doc.metadata?.chapter ? `Chapter: ${doc.metadata.chapter}` : ''}
-            ${doc.metadata?.page ? `Page: ${doc.metadata.page}` : ''}`
-          ).join('\n\n') :
+            ${doc.metadata?.page ? `Page: ${doc.metadata.page}` : ''}`;
+          }).join('\n\n') :
           // Fall back to snippets if no full documents
-          compressedKnowledge.source_snippets.map(snippet => 
-            `[${snippet.id}] From ${snippet.source}:
+          compressedKnowledge.source_snippets.map(snippet => {
+            sourceMapping.set(snippet.id, sourceIndex);
+            const citation = `[${sourceIndex}]`;
+            sourceIndex++;
+            return `${citation} From ${snippet.source}:
             "${snippet.text}"
-            Relevance: ${snippet.relevance}`
-          ).join('\n\n')}
+            Relevance: ${snippet.relevance}`;
+          }).join('\n\n')}
         
         ${compressedKnowledge.key_points.length > 0 ? `
         KEY POINTS FROM BOOKS:
@@ -128,18 +138,30 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
       ${isWebFocused ? 'MAIN INFORMATION FROM WEB:' : 'HIGHLY RELEVANT WEB INFORMATION:'}
       ${relevantSources
         .map((url, i) => {
+          sourceMapping.set(url.id, sourceIndex);
+          const citation = `[${sourceIndex}]`;
+          sourceIndex++;
           const relatedFact = webSummary.facts?.find(f => f.sources.includes(i+1));
-          return `[${url.id}] From ${url.title} (Relevance: ${url.relevance_score}/10):
+          return `${citation} From ${url.title} (Relevance: ${url.relevance_score}/10):
           "${relatedFact?.text || ''}"
-          ${isWebFocused ? 'Context: ' : 'Relevance: '}${relatedFact?.relevance || ''}`
+          ${isWebFocused ? 'Context: ' : 'Relevance: '}${relatedFact?.relevance || ''}`;
         }).join('\n\n')}
       
       ${isWebFocused ? 'ADDITIONAL DETAILS:' : 'SUPPORTING WEB FACTS:'}
       ${relevantFacts
-        .map(fact => 
-          `[${fact.sources.map(s => `WEB${s}`).join('][')}] ${fact.text}
-          ${isWebFocused ? 'Context: ' : 'Why relevant: '}${fact.relevance}`
-        ).join('\n')}
+        .map(fact => {
+          // Map the fact's sources to our numeric citations
+          const citations = fact.sources.map(s => {
+            const webId = `WEB${s}`;
+            if (!sourceMapping.has(webId)) {
+              sourceMapping.set(webId, sourceIndex);
+              sourceIndex++;
+            }
+            return `[${sourceMapping.get(webId)}]`;
+          }).join('');
+          return `${citations} ${fact.text}
+          ${isWebFocused ? 'Context: ' : 'Why relevant: '}${fact.relevance}`;
+        }).join('\n')}
       `;
     }
     
@@ -188,11 +210,11 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     6. Connect different pieces of information to tell a complete story
     7. Your answer should be substantial - at least 3-4 paragraphs when the sources support it
     8. Only use missing_information array for truly significant gaps in knowledge
-    9. Citation numbers should correspond to the source IDs in the context (e.g., [WEB1], [doc_123])
+    9. Use simple numeric citations [1], [2], [3] that will be mapped to sources by the system
 
     EXAMPLE of correct response format:
     {
-      "answer": "The Great Fire of Smyrna began in September 1922 [doc_123]. The fire started in the Armenian quarter and quickly spread through the city's narrow streets [WEB1]. Strong winds and dry conditions helped the fire spread rapidly, leading to widespread destruction [doc_456].",
+      "answer": "The Great Fire of Smyrna began in September 1922 [1]. The fire started in the Armenian quarter and quickly spread through the city's narrow streets [2]. Strong winds and dry conditions helped the fire spread rapidly, leading to widespread destruction [3].",
       "missing_information": ["Exact date and time the fire started", "Total number of casualties"],
       "source_conflicts": []
     }
@@ -204,14 +226,22 @@ async function buildFinalPrompt(queryInfo, compressedKnowledge, webSummary = nul
     Remember: Base your answer ONLY on the provided context. If information is missing or unclear, acknowledge this rather than making assumptions.
     `;
     
+    // Log the source mapping for debugging
+    logger.info('Source mapping created:', {
+      total_sources: sourceMapping.size,
+      mapping: Array.from(sourceMapping.entries()).map(([id, num]) => `${id} -> [${num}]`)
+    });
+    
     logger.info('Final prompt built:', { 
       query: queryInfo.original_query,
-      prompt_length: finalPrompt.length
+      prompt_length: finalPrompt.length,
+      total_citations: sourceIndex - 1
     });
     
     return {
       prompt: finalPrompt,
-      context: context
+      context: context,
+      sourceMapping: Object.fromEntries(sourceMapping)
     };
   } catch (error) {
     logger.error('Error building final prompt:', error);

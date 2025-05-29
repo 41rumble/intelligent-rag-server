@@ -141,12 +141,15 @@ router.post('/', async (req, res) => {
     };
 
     // Build the final prompt using the proper function
-    const { prompt: finalPrompt } = await buildFinalPrompt(
+    const promptResult = await buildFinalPrompt(
       queryInfo,
       processedContext,
       webResults,
       null // No evaluation info for now
     );
+    
+    const finalPrompt = promptResult.prompt;
+    const sourceMapping = promptResult.sourceMapping || {};
 
     // Generate final answer with error handling
     let answer;
@@ -223,41 +226,70 @@ Please try rephrasing your question or being more specific about what you'd like
       ]
     };
 
-    // Format source snippets
-    formattedSnippets = processedContext.source_snippets.map(snippet => ({
-      id: snippet.id,
-      text: snippet.text,
-      source: snippet.source,
-      relevance: snippet.relevance || 1.0,
-      metadata: {
-        type: snippet.type || 'text',
-        chapter: snippet.chapter || null,
-        page: snippet.page || null
+    // Create a map of all sources by their original IDs
+    const allSourcesById = new Map();
+    
+    // Add book sources
+    processedContext.source_snippets.forEach(snippet => {
+      allSourcesById.set(snippet.id, {
+        id: snippet.id,
+        text: snippet.text,
+        source: snippet.source,
+        relevance: snippet.relevance || 1.0,
+        metadata: {
+          type: snippet.type || 'text',
+          chapter: snippet.chapter || null,
+          page: snippet.page || null
+        }
+      });
+    });
+    
+    // Add web sources
+    if (webResults && webResults.source_urls) {
+      webResults.source_urls.forEach(url => {
+        allSourcesById.set(url.id, {
+          id: url.id,
+          text: url.url || url,
+          source: 'web',
+          relevance: url.relevance_score || 1.0,
+          metadata: {
+            type: 'web',
+            url: url.url || url,
+            title: url.title || null,
+            relevance_score: url.relevance_score
+          }
+        });
+      });
+    }
+    
+    // Create source_snippets array in citation order
+    const maxCitation = Math.max(...Object.values(sourceMapping).map(n => parseInt(n)), 0);
+    const orderedSnippets = [];
+    
+    // Build the array in citation order [1], [2], [3], etc.
+    for (let i = 1; i <= maxCitation; i++) {
+      // Find which source ID maps to this citation number
+      const sourceId = Object.keys(sourceMapping).find(id => sourceMapping[id] === i);
+      if (sourceId && allSourcesById.has(sourceId)) {
+        orderedSnippets.push(allSourcesById.get(sourceId));
       }
-    }));
-
-    // Format web sources - use the same ID format as in the context
-    webSources = webResults ? webResults.source_urls.map((url) => ({
-      id: url.id, // Use the ID from webSearch.js (e.g., WEB1, WEB2)
-      text: url.url || url,
-      source: 'web',
-      relevance: url.relevance_score || 1.0,
-      metadata: {
-        type: 'web',
-        url: url.url || url,
-        title: url.title || null,
-        relevance_score: url.relevance_score
-      }
-    })) : [];
+    }
+    
+    // Log the mapping for debugging
+    logger.info('Source citation mapping:', {
+      mapping: sourceMapping,
+      total_citations: maxCitation,
+      ordered_count: orderedSnippets.length
+    });
 
     // Log the formatted response
     logger.info('\n=== Query Response ===\n' +
       `Query: "${query}"\n\n` +
       `Answer: ${answer}\n\n` +
       '=== Source Snippets ===\n' +
-      [...formattedSnippets, ...webSources]
-        .map(snippet => 
-          `[${snippet.id}]\n` +
+      orderedSnippets
+        .map((snippet, index) => 
+          `[${index + 1}] (was ${snippet.id})\n` +
           `Text: ${snippet.text}\n` +
           `Relevance: ${snippet.relevance}\n`
         ).join('\n') +
@@ -271,7 +303,7 @@ Please try rephrasing your question or being more specific about what you'd like
     // Return response
     return res.json({
       answer: answer.trim(),
-      source_snippets: [...formattedSnippets, ...webSources],
+      source_snippets: orderedSnippets,
       log: responseLog
     });
   } catch (error) {
